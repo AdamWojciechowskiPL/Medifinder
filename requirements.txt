@@ -1,0 +1,5 @@
+cryptography
+requests
+selenium
+tkcalendar
+webdriver-manager
