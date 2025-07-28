@@ -1,110 +1,82 @@
 # Medicover Appointment Finder
 
-Zaawansowana aplikacja w języku Python do automatycznego wyszukiwania i rezerwowania wizyt lekarskich w systemie Medicover. Aplikacja jest obsługiwana przez w pełni funkcjonalny interfejs graficzny (GUI) i wspiera zarządzanie wieloma profilami użytkowników.
+Zaawansowana aplikacja desktopowa w języku Python do automatycznego wyszukiwania i rezerwowania wizyt lekarskich w systemie Medicover. Aplikacja jest w pełni obsługiwana przez nowoczesny, intuicyjny interfejs graficzny (GUI), wspiera zarządzanie wieloma profilami użytkowników i oferuje spersonalizowane ustawienia dla każdego z nich.
 
 ## Kluczowe Funkcjonalności
 
--   **Intuicyjny Interfejs Graficzny (GUI)**: Aplikacja działa wyłącznie w trybie graficznym (opartym na Tkinter), co zapewnia łatwą i przejrzystą obsługę wszystkich funkcji.
--   **Obsługa Wielu Profili**: Bezpieczne zarządzanie wieloma kontami Medicover. Dane logowania są przechowywane lokalnie, a przełączanie między profilami (np. "Moje konto", "Konto żony") jest proste i szybkie. Opisy profili ułatwiają identyfikację.
+-   **Nowoczesny Interfejs Graficzny (GUI)**: Aplikacja działa wyłącznie w trybie graficznym (opartym na Tkinter). Interfejs wykorzystuje zwijane sekcje ("akordeon"), aby zmaksymalizować przestrzeń dla najważniejszego elementu – listy znalezionych wizyt.
+-   **Zarządzanie Wieloma Profilami**: Bezpieczne zarządzanie wieloma kontami Medicover (np. dla całej rodziny). Dane logowania są szyfrowane i przechowywane lokalnie, a przełączanie między profilami jest proste i szybkie.
+-   **Ustawienia Per Profil**: Każdy profil użytkownika ma swoje własne, unikalne ustawienia filtrów i automatyzacji, które są automatycznie zapisywane i wczytywane przy przełączaniu.
 -   **Zaawansowane Filtrowanie Wielokrotne**: Możliwość filtrowania wizyt po specjalności oraz **wielu lekarzach i placówkach jednocześnie**, co znacząco zwiększa elastyczność wyszukiwania.
 -   **Sortowanie Wyników**: Listę znalezionych wizyt można dynamicznie sortować rosnąco lub malejąco po dowolnej kolumnie (data, lekarz, specjalność, placówka) przez kliknięcie w jej nagłówek.
--   **Automatyczna Rezerwacja (Tryb Bota)**: Eksperymentalna funkcja, która pozwala na automatyczne zarezerwowanie pierwszej wizyty spełniającej kryteria (w tym filtry godzinowe: rano, popołudnie, wieczór). Funkcja jest zabezpieczona komunikatem ostrzegawczym.
+-   **Elastyczna Automatyczna Rezerwacja (Tryb Bota)**: Funkcja, która pozwala na automatyczne zarezerwowanie pierwszej wizyty spełniającej szczegółowe kryteria, takie jak **wybrane dni tygodnia** oraz **dokładny przedział godzinowy** (np. od 10:00 do 15:00).
 -   **Inteligentna Obsługa Blokad API**: Aplikacja wykrywa twarde blokady API (błąd 429) nałożone przez Medicover. W takim przypadku automatycznie wchodzi w 10-minutowy tryb "kwarantanny", blokując interfejs i wyświetlając licznik, aby chronić konto użytkownika.
--   **Zapamiętywanie Stanu Aplikacji**: Po zamknięciu, aplikacja automatycznie zapisuje ostatnio używany profil oraz ustawienia filtrów do pliku `gui_settings.json`, przywracając je przy następnym uruchomieniu.
--   **Niezawodne Logowanie**: Proces logowania przez Selenium jest zoptymalizowany pod kątem omijania podstawowych zabezpieczeń anty-botowych i potrafi inteligentnie czekać na odblokowanie sesji Windows, jeśli aplikacja została uruchomiona na zablokowanym komputerze.
+-   **Niezawodne Logowanie**: Proces logowania przez Selenium jest zoptymalizowany pod kątem omijania podstawowych zabezpieczeń anty-botowych i potrafi inteligentnie czekać na odblokowanie sesji Windows.
 
 ## Architektura Projektu
 
-Aplikacja została zbudowana w oparciu o zasady **modularności** i **separacji odpowiedzialności (SoC)**, co czyni kod czystym i łatwym w utrzymaniu.
+Aplikacja została zbudowana w oparciu o zasady **modularności** i **separacji odpowiedzialności (SoC)**, z wyraźnym podziałem na kod aplikacji i pliki konfiguracyjne.
 
--   **`MedicoverApp` (`main.py`)**: Główna klasa aplikacji, która koordynuje pracę wszystkich komponentów.
--   **`MedicoverGUI` (`gui.py`)**: Warstwa prezentacji, odpowiedzialna za wyświetlanie danych i interakcję z użytkownikiem.
--   **`MedicoverClient` (`medicover_client.py`)**: Warstwa logiki biznesowej, zarządzająca sesją i delegująca zadania do niższych warstw.
--   **`MedicoverAuthenticator` (`medicover_authenticator.py`)**: Komponent odpowiedzialny wyłącznie za proces uwierzytelniania przez Selenium.
--   **`Config` (`config.py`) / `ProfileManager`**: Klasy odpowiedzialne za zarządzanie konfiguracją (`credentials.json`) i profilami (`profiles.json`).
+```
+medicover-app/
+│
+├── config/                # Katalog na wszystkie pliki konfiguracyjne
+│   ├── credentials.json
+│   ├── profiles.json
+│   └── ...
+│
+├── app/                   # Katalog z kodem źródłowym aplikacji
+│   ├── main.py
+│   ├── gui.py
+│   └── ...
+│
+├── requirements.txt       # Lista zależności Pythona
+├── install.bat            # Skrypt instalacyjny
+├── run.py                 # Główny plik startowy aplikacji
+└── start.bat              # Skrypt uruchomieniowy dla użytkownika
+```
 
 ## Wymagania Wstępne
 
+-   Windows 10 lub nowszy
 -   Python 3.9+
 -   Przeglądarka Google Chrome
 
 ## Instalacja
 
-1.  **Zainstaluj wymagane biblioteki:**
-    Utwórz plik `requirements.txt` (jego zawartość znajduje się poniżej) i uruchom:
-    ```bash
-    pip install -r requirements.txt
-    ```
+Proces instalacji jest w pełni zautomatyzowany.
 
-## Konfiguracja
+1.  **Pobierz i zainstaluj Pythona**: Jeśli nie masz go na komputerze, pobierz instalator ze strony `python.org`. **Ważne:** Podczas instalacji zaznacz opcję **"Add Python to PATH"**.
 
-Przy pierwszym uruchomieniu aplikacja automatycznie utworzy niezbędne pliki konfiguracyjne.
+2.  **Rozpakuj archiwum z aplikacją** do wybranego folderu.
 
-#### 1. `profiles.json`
-Ten plik przechowuje dane logowania dla poszczególnych profili. **Przy pierwszym uruchomieniu aplikacja poprosi o stworzenie profilu w menedżerze.** Możesz dodać dowolną liczbę profili.
-
--   `username`: Twój login do Medicover (e-mail lub numer karty).
--   `password`: Twoje hasło (przechowywane w formie zaszyfrowanej).
--   `description`: Dowolny opis, który będzie widoczny w GUI (np. "Moje konto", "Konto żony").
--   `default`: Ustaw `true` dla jednego profilu, który ma być ładowany domyślnie.
-
-*Przykład:*
-```json
-[
-    {
-        "username": "jan.kowalski@email.com",
-        "password": "zaszyfrowane_haslo_1",
-        "description": "Konto Jana",
-        "default": true
-    },
-    {
-        "username": "444555666",
-        "password": "zaszyfrowane_haslo_2",
-        "description": "Konto Anny",
-        "default": false
-    }
-]
-```
-
-#### 2. `credentials.json`
-Ten plik przechowuje ogólną konfigurację aplikacji, taką jak domyślny region wyszukiwania czy ustawienia trybu `headless`.
-
-*Przykład:*
-```json
-{
-    "search_params": {
-        "region_ids": [
-            204
-        ]
-    },
-    "check_interval_minutes": 5,
-    "headless": false,
-    "logging": {
-        "level": "INFO",
-        "format": "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
-    }
-}
-```
-
-#### 3. `gui_settings.json`
-Ten plik jest tworzony i zarządzany **automatycznie**. Przechowuje ostatni stan interfejsu użytkownika (wybrany profil, wartości filtrów) i nie powinien być edytowany ręcznie.
+3.  **Uruchom instalator**: Kliknij dwukrotnie plik **`install.bat`**. Skrypt automatycznie:
+    *   Sprawdzi, czy Python jest dostępny.
+    *   Stworzy izolowane środowisko wirtualne w folderze `venv/`.
+    *   Zainstaluje wszystkie wymagane biblioteki.
+    Postępuj zgodnie z instrukcjami w oknie konsoli.
 
 ## Uruchomienie Aplikacji
 
-Aplikacja działa wyłącznie w trybie graficznym (GUI). Wszystkie opcje, takie jak tryb `headless`, konfiguruje się w pliku `credentials.json`.
+Po pomyślnej instalacji, aplikację uruchamia się w bardzo prosty sposób:
 
-#### Uruchomienie Interfejsu Graficznego
+**Kliknij dwukrotnie plik `start.bat`**.
 
-To jest jedyny sposób użycia aplikacji. Otwórz terminal w folderze z projektem i uruchom:
-```bash
-python main.py
-```
+Pojawi się wyłącznie okno aplikacji, bez dodatkowego okna konsoli w tle.
 
-#### Uruchomienie bez okna konsoli (Windows)
+## Pierwsze Użycie i Konfiguracja
 
-Aby uruchomić aplikację tak, by widoczne było tylko okno GUI (bez czarnego okna konsoli w tle), możesz:
-1.  Zmienić nazwę pliku `main.py` na `main.pyw` i uruchamiać go podwójnym kliknięciem.
-2.  Uruchomić aplikację komendą:
-    ```bash
-    pythonw main.py
-    ```
+Przy pierwszym uruchomieniu aplikacja automatycznie utworzy niezbędne pliki w katalogu `config/`.
+
+#### 1. Tworzenie Profilu
+Aplikacja poprosi Cię o stworzenie pierwszego profilu. Przejdź do zwijanej sekcji **"Zarządzanie Profilem"** i użyj przycisku **"Zarządzaj Profilami..."**. Będziesz musiał podać:
+-   **Login**: Twój numer karty Medicover.
+-   **Hasło**: Twoje hasło do systemu Medicover.
+-   **Twoja nazwa konta**: Dowolna, czytelna nazwa, która będzie widoczna w GUI (np. "Moje konto", "Konto Adama").
+
+#### 2. Pliki Konfiguracyjne
+Wszystkie pliki konfiguracyjne znajdują się w folderze `config/`:
+-   `profiles.json`: Przechowuje Twoje profile użytkowników. Hasła są w nim **zaszyfrowane**.
+-   `profile_key.key`: **Klucz do szyfrowania haseł**. Jest on unikalny dla Twojego komputera. **Ważne:** Jeśli chcesz przenieść aplikację na inny komputer, musisz skopiować zarówno `profiles.json`, jak i ten plik klucza.
+-   `gui_settings.json`: Plik zarządzany **automatycznie**. Przechowuje ostatni stan interfejsu (filtry, ustawienia automatyzacji) dla każdego profilu.
+-   `credentials.json`: Przechowuje ogólną konfigurację aplikacji, taką jak domyślny region wyszukiwania czy ustawienia trybu `headless`.
