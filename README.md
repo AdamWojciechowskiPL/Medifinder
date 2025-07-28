@@ -1,10 +1,10 @@
 # Medicover Appointment Finder
 
-Zaawansowana aplikacja desktopowa w języku Python do automatycznego wyszukiwania i rezerwowania wizyt lekarskich w systemie Medicover. Aplikacja jest w pełni obsługiwana przez nowoczesny, intuicyjny interfejs graficzny (GUI), wspiera zarządzanie wieloma profilami użytkowników i oferuje spersonalizowane ustawienia dla każdego z nich.
+Zaawansowana aplikacja desktopowa w języku Python do automatycznego wyszukiwania i rezerwowania wizyt lekarskich w systemie Medicover.
 
 ## Kluczowe Funkcjonalności
 
--   **Nowoczesny Interfejs Graficzny (GUI)**: Aplikacja działa wyłącznie w trybie graficznym (opartym na Tkinter). Interfejs wykorzystuje zwijane sekcje ("akordeon"), aby zmaksymalizować przestrzeń dla najważniejszego elementu – listy znalezionych wizyt.
+-   **Nowoczesny Interfejs Graficzny (GUI)**: Aplikacja działa wyłącznie w trybie graficznym (opartym na Tkinter).
 -   **Zarządzanie Wieloma Profilami**: Bezpieczne zarządzanie wieloma kontami Medicover (np. dla całej rodziny). Dane logowania są szyfrowane i przechowywane lokalnie, a przełączanie między profilami jest proste i szybkie.
 -   **Ustawienia Per Profil**: Każdy profil użytkownika ma swoje własne, unikalne ustawienia filtrów i automatyzacji, które są automatycznie zapisywane i wczytywane przy przełączaniu.
 -   **Zaawansowane Filtrowanie Wielokrotne**: Możliwość filtrowania wizyt po specjalności oraz **wielu lekarzach i placówkach jednocześnie**, co znacząco zwiększa elastyczność wyszukiwania.
