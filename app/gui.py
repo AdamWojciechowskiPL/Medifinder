@@ -17,8 +17,24 @@ import time
 from profile_manager import ProfileManager
 from error_handler import APIRetryExhaustedError
 from pathlib import Path
+import queue
+
 logger = logging.getLogger(__name__)
 from medicover_client import LoginRequiredException
+
+
+class GuiLogHandler(logging.Handler):
+    """
+    Niestandardowy handler logowania, który bezpiecznie przekazuje
+    rekordy logów do kolejki w celu ich wyświetlenia w widżecie GUI.
+    """
+    def __init__(self, log_queue: queue.Queue):
+        super().__init__()
+        self.log_queue = log_queue
+
+    def emit(self, record):
+        """Dodaje sformatowany rekord logu do kolejki."""
+        self.log_queue.put(self.format(record))
 
 
 class ProfileManagerWindow(tk.Toplevel):
@@ -248,7 +264,7 @@ class MedicoverGUI:
     _DISABLED = 'disabled'
     _NORMAL = 'normal'
     _SETTINGS_FILE = "gui_settings.json"
-    APP_VERSION = "1.0.1"
+    APP_VERSION = "1.1"
     COLORS = {
         'primary': '#0078D4',    # Główny niebieski (np. nagłówki, przyciski)
         'primary_light': '#E5F1FB',
@@ -256,7 +272,8 @@ class MedicoverGUI:
         'background': '#F3F3F3', # Jasnoszare tło
         'text': '#201F1E',       # Ciemnoszary tekst
         'white': '#FFFFFF',
-        'grey': '#7A7A7A'
+        'grey': '#7A7A7A',
+        'critical': '#D83B01' # Pomarańczowy/czerwony dla krytycznych logów
     }
 
     def __init__(self, app, config_dir: Path):
@@ -291,11 +308,22 @@ class MedicoverGUI:
         self.profile_header_var = tk.StringVar(value="Zarządzanie Profilem")
         self.cyclic_header_var = tk.StringVar(value="Automatyczne sprawdzanie: Wyłączone")
         self.autobook_header_var = tk.StringVar(value="Automatyczna Rezerwacja: Wyłączona")
+        # NOWOŚĆ: Zmienna dla nagłówka historii
+        self.history_header_var = tk.StringVar(value="Historia Operacji")
         self._profile_var = tk.StringVar()
         self._sort_column = None # Przechowuje ID ostatnio sortowanej kolumny
         self._sort_direction = False # False = rosnąco, True = malejąco
+        
+        # NOWOŚĆ: Inicjalizacja kolejki dla logów
+        self.log_queue = queue.Queue()
+        
         self.setup_window()
         self.setup_widgets()
+        
+        # NOWOŚĆ: Konfiguracja loggera dla GUI i uruchomienie jego procesora
+        self._setup_gui_logger()
+        self._process_log_queue()
+        
         last_active_profile_name = None
         try:
             with open(self._SETTINGS_FILE, 'r', encoding='utf-8') as f:
@@ -385,6 +413,10 @@ class MedicoverGUI:
                 relief=[('active', 'sunken')])
 
         style.configure('Highlight.TLabel', foreground='red', font=('Segoe UI', 9, 'bold'), background=self.COLORS['background'])
+        
+        # NOWOŚĆ: Style dla pola historii
+        style.configure('History.TScrolledText', font=('Consolas', 9))
+
 
     def on_closing(self):
         """Obsługuje zamknięcie aplikacji, zapisując ustawienia."""
@@ -583,6 +615,10 @@ class MedicoverGUI:
         # --- Sekcja Automatycznej Rezerwacji (zwijana) ---
         autobook_content, self.autobook_title_label = self._create_collapsible_frame(mainframe, self.autobook_header_var)
         self._build_autobook_panel(autobook_content)
+        
+        # --- NOWA SEKCJA: Historia Operacji (zwijana) ---
+        history_content, _ = self._create_collapsible_frame(mainframe, self.history_header_var)
+        self._build_history_panel(history_content)
 
         # --- Panele, które są zawsze widoczne ---
         self.create_filter_panel(mainframe)
@@ -898,6 +934,17 @@ class MedicoverGUI:
             self.autobook_checkbox, self.autobook_start_spinbox, self.autobook_end_spinbox
         ] + self.autobook_day_checkboxes
         self._update_autobook_widgets_state()
+        
+    def _build_history_panel(self, parent):
+        """NOWA METODA: Buduje zawartość panelu historii operacji."""
+        self.history_text = scrolledtext.ScrolledText(parent, state='disabled', height=8, wrap=tk.WORD, font=('Consolas', 9))
+        self.history_text.pack(fill='both', expand=True)
+        
+        # Definiowanie tagów do kolorowania tekstu
+        self.history_text.tag_config('INFO', foreground='black')
+        self.history_text.tag_config('SUCCESS', foreground=self.COLORS['success'])
+        self.history_text.tag_config('WARNING', foreground='#E59400') # Pomarańczowy
+        self.history_text.tag_config('CRITICAL', foreground=self.COLORS['critical'], font=('Consolas', 9, 'bold'))
 
     # ===================================================================
     # UI UPDATES & POPULATION
@@ -1236,16 +1283,55 @@ class MedicoverGUI:
         self._update_autobook_header()
 
     # ===================================================================
-    # CYCLIC CHECKING LOGIC
+    # CYCLIC CHECKING & LOGGING LOGIC
     # ===================================================================
 
+    def _setup_gui_logger(self):
+        """NOWA METODA: Konfiguruje dedykowany logger dla historii w GUI."""
+        self.history_logger = logging.getLogger('GuiHistoryLogger')
+        self.history_logger.setLevel(logging.INFO)
+        
+        # Używamy naszego niestandardowego handlera
+        gui_handler = GuiLogHandler(self.log_queue)
+        
+        # Prosty formatter dla czytelności
+        formatter = logging.Formatter('%(asctime)s - %(message)s', '%H:%M:%S')
+        gui_handler.setFormatter(formatter)
+        
+        self.history_logger.addHandler(gui_handler)
+        # Zapobiegamy propagacji logów do nadrzędnych loggerów, aby nie duplikować wpisów
+        self.history_logger.propagate = False
+
+    def _process_log_queue(self):
+        """NOWA METODA: Przetwarza kolejkę logów i aktualizuje widżet tekstowy."""
+        try:
+            while not self.log_queue.empty():
+                message = self.log_queue.get_nowait()
+                
+                # Wybierz tag koloru na podstawie treści komunikatu
+                tag = 'INFO'
+                if "SUKCES" in message:
+                    tag = 'SUCCESS'
+                elif "BŁĄD" in message:
+                    tag = 'WARNING'
+                elif "BLOKADA" in message:
+                    tag = 'CRITICAL'
+                
+                self.history_text.configure(state='normal')
+                self.history_text.insert(tk.END, message + '\n', tag)
+                self.history_text.configure(state='disabled')
+                self.history_text.see(tk.END) # Automatyczne przewijanie
+        finally:
+            # Uruchom ponownie tę metodę po 100ms
+            self.root.after(100, self._process_log_queue)
+            
     def _enter_quarantine(self):
         """Wprowadza aplikację w 10-minutowy tryb kwarantanny po błędzie 429."""
         if self.is_quarantined:
             return # Już jesteśmy w kwarantannie
 
         self.is_quarantined = True
-        self.logger.critical("WCHODZĘ W TRYB KWARANTANNY NA 10 MINUT.")
+        self.history_logger.critical("BLOKADA API! Włączono 10-minutową kwarantannę.")
         
         # 1. Zatrzymaj wszystkie automatyczne mechanizmy
         self.stop_cyclic_check()
@@ -1277,7 +1363,7 @@ class MedicoverGUI:
     def _leave_quarantine(self):
         """Kończy tryb kwarantanny i odblokowuje interfejs."""
         self.is_quarantined = False
-        self.logger.info("Koniec kwarantanny. Odblokowuję interfejs.")
+        self.history_logger.info("Koniec kwarantanny. Można wznowić wyszukiwanie.")
         
         # Odblokuj przyciski
         self.search_button.config(state=self._NORMAL)
@@ -1324,7 +1410,7 @@ class MedicoverGUI:
         # Pierwsze uruchomienie głównego zadania i licznika
         self.cyclic_job_id = self.root.after(interval_ms, cyclic_task)
         self._update_countdown_label() # Uruchom licznik natychmiast
-        self.logger.info(f"Cykliczne sprawdzanie uruchomione co {interval_minutes} minut.")
+        self.history_logger.info(f"Cykliczne sprawdzanie uruchomione co {interval_minutes} min.")
 
 
     def stop_cyclic_check(self):
@@ -1339,7 +1425,7 @@ class MedicoverGUI:
 
         self.next_check_time = None
         self._update_countdown_label() 
-        self.logger.info("Cykliczne sprawdzanie zatrzymane.")
+        self.history_logger.info("Cykliczne sprawdzanie zatrzymane.")
 
     def update_cyclic_interval(self):
         """
@@ -1436,6 +1522,9 @@ class MedicoverGUI:
         if not is_background_check:
             self.status_var.set("Przygotowywanie zapytania do API...")
             self.root.update_idletasks()
+        else:
+            # NOWOŚĆ: Logowanie do historii
+            self.history_logger.info("Sprawdzanie automatyczne...")
 
         def worker():
             """Wątek roboczy wykonujący całą logikę wyszukiwania."""
@@ -1478,6 +1567,10 @@ class MedicoverGUI:
                 if appointments is None:
                     self.root.after(0, self._enter_quarantine)
                     return
+                
+                # NOWOŚĆ: Logowanie wyniku do historii
+                if is_background_check:
+                    self.history_logger.info(f"Znaleziono {len(appointments)} wizyt.")
 
                 # Krok 3: Filtrowanie po dacie 'do'
                 if (date_to_str := self.date_to_entry.get().strip()) and appointments:
@@ -1510,7 +1603,7 @@ class MedicoverGUI:
                                 continue # Pomiń, jeśli godzina jest poza zakresem
 
                             # Jeśli wizyta przeszła wszystkie testy, jest kandydatem!
-                            self.logger.info(f"Znaleziono pasującą wizytę: {apt.get('appointmentDate')}. Zlecanie rezerwacji.")
+                            self.history_logger.info(f"Znaleziono kandydata do auto-rezerwacji!")
                             self.root.after(0, self._perform_autobooking, apt)
                             return # Zakończ wątek po znalezieniu i zleceniu rezerwacji
 
@@ -1538,15 +1631,17 @@ class MedicoverGUI:
         result = self.app.book_appointment(appointment)
         
         if result.get("success"):
-            self.logger.info("Automatyczna rezerwacja zakończona sukcesem!")
+            doctor = self.extract_doctor_name(appointment)
+            date_str, time_str = self.extract_appointment_data(appointment)
+            
+            # NOWOŚĆ: Logowanie sukcesu do historii
+            self.history_logger.info(f"SUKCES! Zarezerwowano: {doctor}, {date_str} {time_str}.")
             
             # Wyłącz wszystkie automatyczne mechanizmy
             self.stop_cyclic_check()
             self.cyclic_enabled.set(False)
             self.autobook_enabled.set(False)
             self._update_autobook_header()
-            doctor = self.extract_doctor_name(appointment)
-            date_str, time_str = self.extract_appointment_data(appointment)
             
             self.status_var.set(f"Sukces! Zarezerwowano wizytę {date_str} {time_str}.")
             messagebox.showinfo(
@@ -1557,7 +1652,8 @@ class MedicoverGUI:
             self.search_appointments_from_gui()
         else:
             error_msg = result.get("message", "Nieznany błąd.")
-            self.logger.error(f"Automatyczna rezerwacja nie powiodła się: {error_msg}")
+            # NOWOŚĆ: Logowanie błędu do historii
+            self.history_logger.warning(f"BŁĄD auto-rezerwacji: {error_msg}")
             self.status_var.set(f"Błąd auto-rezerwacji: {error_msg}")
             # Nie wyłączamy automatyki, spróbujemy ponownie przy następnym cyklu
             
