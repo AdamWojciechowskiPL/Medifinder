@@ -866,5 +866,17 @@
         "specialty_ids": [
             "30"
         ]
+    },
+    "Podlaszewski Jakub": {
+        "id": "506994",
+        "specialty_ids": [
+            "62742"
+        ]
+    },
+    "Mroczkowska Natalia": {
+        "id": "513792",
+        "specialty_ids": [
+            "62742"
+        ]
     }
 }

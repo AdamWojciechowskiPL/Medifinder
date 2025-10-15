@@ -39,5 +39,6 @@
   "Punkt Pobrań - dzieci zdrowe": { "ids": [65150], "for_child_account_only": true },
   "Punkt Pobrań - dzieci chore": { "ids": [65148], "for_child_account_only": true },
   "Punkt Pobrań - dorośli": { "ids": [52106], "for_adult_account_only": true },
-  "Urolog": { "ids": [30], "for_adult_account_only": true }
+  "Urolog": { "ids": [30], "for_adult_account_only": true },
+  "Medicover Express - szczepienia grypa - dorośli - pielęgniarka": { "ids": [62742,486], "for_adult_account_only": true }
 }
