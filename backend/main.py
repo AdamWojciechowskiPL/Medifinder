@@ -7,7 +7,7 @@ from datetime import datetime, date
 from flask import Flask, jsonify, request, session, redirect, url_for
 from flask_cors import CORS
 from authlib.integrations.flask_client import OAuth
-from werkzeug.middleware.proxy_fix import ProxyFix  # Dodano dla obsługi proxy (Railway)
+from werkzeug.middleware.proxy_fix import ProxyFix
 from dotenv import load_dotenv
 
 # Ładowanie zmiennych środowiskowych
@@ -105,14 +105,23 @@ def auth_login():
 
 @app.route('/auth/callback')
 def auth_callback():
-    token = oauth.google.authorize_access_token()
-    user_info = oauth.google.parse_id_token(token)
-    session['user'] = {
-        'email': user_info.get('email'),
-        'name': user_info.get('name')
-    }
-    logger.info(f"🔐 Zalogowano użytkownika {session['user']['email']}")
-    return redirect(os.environ.get('FRONTEND_URL', '/'))
+    try:
+        token = oauth.google.authorize_access_token()
+        # Próba pobrania userinfo z tokenu (Authlib często to robi automatycznie)
+        user_info = token.get('userinfo')
+        # Jeśli nie ma w tokenie, pobierz z endpointu userinfo
+        if not user_info:
+            user_info = oauth.google.userinfo()
+            
+        session['user'] = {
+            'email': user_info.get('email'),
+            'name': user_info.get('name')
+        }
+        logger.info(f"🔐 Zalogowano użytkownika {session['user']['email']}")
+        return redirect(os.environ.get('FRONTEND_URL', '/'))
+    except Exception as e:
+        logger.error(f"❌ Błąd autoryzacji Google: {e}", exc_info=True)
+        return jsonify({'success': False, 'error': f'Błąd logowania: {str(e)}'}), 500
 
 
 @app.route('/auth/logout', methods=['POST'])
