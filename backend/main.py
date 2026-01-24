@@ -67,18 +67,14 @@ med_app = None
 try:
     from app.main import MedicoverApp
     logger.info("✅ MedicoverApp zaimportowany poprawnie")
-except ImportError as e:
-    logger.error(f"❌ Nie można zaimportować MedicoverApp: {e}")
-
-def init_app():
-    global med_app
+    # Inicjalizacja natychmiastowa (globalna) dla Gunicorn
     try:
         med_app = MedicoverApp(CONFIG_DIR)
-        logger.info("✅ Medifinder zainicjalizowany")
-        return True
+        logger.info("✅ Medifinder zainicjalizowany globalnie")
     except Exception as e:
-        logger.error(f"❌ Błąd inicjalizacji: {e}", exc_info=True)
-        return False
+        logger.error(f"❌ Błąd inicjalizacji instancji MedicoverApp: {e}", exc_info=True)
+except ImportError as e:
+    logger.error(f"❌ Nie można zaimportować klasy MedicoverApp: {e}")
 
 # ======== API & AUTH ROUTES (Defined FIRST for priority) =========
 
@@ -242,6 +238,10 @@ def serve_static(path):
     return send_from_directory(app.static_folder, 'index.html')
 
 if __name__ == '__main__':
-    if not init_app(): sys.exit(1)
+    # Przy uruchamianiu bezpośrednim (python main.py), jeśli inicjalizacja globalna zawiodła, spróbuj ponownie lub wyjdź
+    if not med_app:
+        logger.error("Aplikacja nie została poprawnie zainicjalizowana na poziomie globalnym.")
+        # Opcjonalnie: sys.exit(1)
+        
     port = int(os.environ.get('PORT', 5000))
     app.run(host='0.0.0.0', port=port, debug=os.environ.get('FLASK_DEBUG')=='True', threaded=True)
