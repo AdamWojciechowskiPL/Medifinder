@@ -32,17 +32,28 @@ async function checkAuth() {
     try {
         const resp = await fetch(`${AUTH_URL}/me`, { credentials: 'include' });
         const data = await resp.json();
+        
+        // Logowanie debugujące, aby zobaczyć co zwraca backend
+        console.log('Auth check response:', data);
+
         if (data.authenticated) {
+            console.log('User is authenticated, updating UI...');
             document.getElementById('loginOverlay').style.display = 'none';
             document.getElementById('appContent').classList.remove('hidden');
             document.getElementById('userLabel').textContent = data.user.name || data.user.email;
-            document.getElementById('authBtn').textContent = 'Wyloguj';
-            document.getElementById('authBtn').onclick = logout;
+            
+            const authBtn = document.getElementById('authBtn');
+            authBtn.textContent = 'Wyloguj';
+            authBtn.onclick = logout;
+            
             loadProfiles();
         } else {
+            console.log('User is NOT authenticated');
             document.getElementById('loginOverlay').style.display = 'flex';
         }
-    } catch (e) { console.error(e); }
+    } catch (e) { 
+        console.error('Auth check error:', e); 
+    }
 }
 
 function loginWithGoogle() { window.location.href = `${AUTH_URL}/login`; }
@@ -52,36 +63,44 @@ async function logout() { await fetch(`${AUTH_URL}/logout`, { method: 'POST', cr
 // DATA LOADING
 // =========================
 async function loadProfiles() {
-    const resp = await fetch(`${API_URL}/api/v1/profiles`, { credentials: 'include' });
-    const data = await resp.json();
-    if (data.success && data.data.length > 0) {
-        profiles = data.data;
-        currentProfile = profiles[0]; // Default to first
-        updateProfileUI();
-        loadDictionaries();
-    } else {
-        toggleProfilesModal(); // Force create profile
+    try {
+        const resp = await fetch(`${API_URL}/api/v1/profiles`, { credentials: 'include' });
+        const data = await resp.json();
+        if (data.success && data.data.length > 0) {
+            profiles = data.data;
+            currentProfile = profiles[0]; // Default to first
+            updateProfileUI();
+            loadDictionaries();
+        } else {
+            toggleProfilesModal(); // Force create profile
+        }
+    } catch (e) {
+        console.error("Error loading profiles:", e);
     }
 }
 
 async function loadDictionaries() {
-    // 1. Specialties
-    const specResp = await fetch(`${API_URL}/api/v1/dictionaries/specialties?profile=${currentProfile}`, { credentials: 'include' });
-    const specData = await specResp.json();
-    allSpecialties = specData.data || [];
-    renderSpecialties();
+    try {
+        // 1. Specialties
+        const specResp = await fetch(`${API_URL}/api/v1/dictionaries/specialties?profile=${currentProfile}`, { credentials: 'include' });
+        const specData = await specResp.json();
+        allSpecialties = specData.data || [];
+        renderSpecialties();
 
-    // 2. Doctors
-    const docResp = await fetch(`${API_URL}/api/v1/dictionaries/doctors`, { credentials: 'include' });
-    const docData = await docResp.json();
-    allDoctors = docData.data || [];
-    renderMultiSelect('doctorsList', allDoctors, selectedDoctors, 'doctor');
+        // 2. Doctors
+        const docResp = await fetch(`${API_URL}/api/v1/dictionaries/doctors`, { credentials: 'include' });
+        const docData = await docResp.json();
+        allDoctors = docData.data || [];
+        renderMultiSelect('doctorsList', allDoctors, selectedDoctors, 'doctor');
 
-    // 3. Clinics
-    const clinicResp = await fetch(`${API_URL}/api/v1/dictionaries/clinics`, { credentials: 'include' });
-    const clinicData = await clinicResp.json();
-    allClinics = clinicData.data || [];
-    renderMultiSelect('clinicsList', allClinics, selectedClinics, 'clinic');
+        // 3. Clinics
+        const clinicResp = await fetch(`${API_URL}/api/v1/dictionaries/clinics`, { credentials: 'include' });
+        const clinicData = await clinicResp.json();
+        allClinics = clinicData.data || [];
+        renderMultiSelect('clinicsList', allClinics, selectedClinics, 'clinic');
+    } catch (e) {
+        console.error("Error loading dictionaries:", e);
+    }
 }
 
 // =========================
@@ -91,12 +110,14 @@ function updateProfileUI() {
     document.getElementById('currentProfileLabel').textContent = `${currentProfile}`;
     // Re-render list in modal
     const list = document.getElementById('profilesList');
-    list.innerHTML = profiles.map(p => 
-        `<div style="display:flex; justify-content:space-between; margin-bottom:5px;">
-            <span>${p}</span>
-            <button class="btn btn-sm" onclick="switchProfile('${p}')">Wybierz</button>
-         </div>`
-    ).join('');
+    if (list) {
+        list.innerHTML = profiles.map(p => 
+            `<div style="display:flex; justify-content:space-between; margin-bottom:5px;">
+                <span>${p}</span>
+                <button class="btn btn-sm" onclick="switchProfile('${p}')">Wybierz</button>
+             </div>`
+        ).join('');
+    }
 }
 
 function switchProfile(name) {
@@ -108,6 +129,7 @@ function switchProfile(name) {
 
 function renderSpecialties() {
     const sel = document.getElementById('specialtySelect');
+    if (!sel) return;
     sel.innerHTML = '<option value="">-- Wybierz --</option>' + 
         allSpecialties.map(s => `<option value="${s.ids.join(',')}">${s.name}</option>`).join('');
 }
@@ -137,6 +159,8 @@ function handleSpecialtyChange() {
 // Multi-Select Renderer
 function renderMultiSelect(elementId, items, selectionSet, type) {
     const container = document.getElementById(elementId);
+    if (!container) return;
+    
     container.innerHTML = items.map(item => {
         const isChecked = selectionSet.has(item.id) ? 'checked' : '';
         return `<div class="dropdown-item" onclick="toggleSelection('${type}', '${item.id}', this)">
@@ -154,9 +178,6 @@ function renderMultiSelect(elementId, items, selectionSet, type) {
 function toggleSelection(type, id, element) {
     const set = type === 'doctor' ? selectedDoctors : selectedClinics;
     // Cast ID to correct type (usually int from backend, but string in HTML)
-    // Backend IDs seem to be ints. Check `renderMultiSelect`.
-    // In `items.map`, item.id is inserted as string. Let's treat as string or number consistent.
-    // Let's store as string in Set to be safe with HTML attributes.
     id = parseInt(id); 
 
     if (set.has(id)) {
@@ -175,6 +196,8 @@ function toggleSelection(type, id, element) {
 function updateTriggerLabel(elementId, set, baseLabel) {
     const count = set.size;
     const btn = document.getElementById(elementId);
+    if (!btn) return;
+    
     if (count === 0) btn.textContent = "Wybierz...";
     else btn.textContent = `${count} zaznaczonych`;
 }
@@ -194,6 +217,7 @@ function clearSelection(listId) {
 
 function toggleDropdown(id) {
     const el = document.getElementById(id);
+    if (!el) return;
     const wasOpen = el.classList.contains('open');
     // Close all others
     document.querySelectorAll('.custom-dropdown').forEach(d => d.classList.remove('open'));
@@ -213,6 +237,8 @@ function filterDropdown(input, listId) {
 function initWeekdays() {
     const days = ['Pon', 'Wt', 'Śr', 'Czw', 'Pt', 'Sob', 'Nd'];
     const container = document.getElementById('weekdaysContainer');
+    if (!container) return;
+    
     container.innerHTML = days.map((d, i) => `
         <label class="weekday-check">
             <input type="checkbox" checked value="${i+1}"> ${d}
@@ -226,8 +252,11 @@ function setDefaultDates() {
     nextMonth.setMonth(nextMonth.getMonth() + 1);
     const nextStr = nextMonth.toISOString().split('T')[0];
     
-    document.getElementById('dateFrom').value = today;
-    document.getElementById('dateTo').value = nextStr;
+    const dFrom = document.getElementById('dateFrom');
+    const dTo = document.getElementById('dateTo');
+    
+    if (dFrom) dFrom.value = today;
+    if (dTo) dTo.value = nextStr;
 }
 
 // =========================
@@ -237,8 +266,6 @@ async function searchAppointments() {
     if (!currentProfile) { showToast('Brak wybranego profilu', 'error'); return; }
 
     const specVal = document.getElementById('specialtySelect').value;
-    // Desktop logic: Specialty is required? Usually yes to filter properly.
-    // If not selected, send empty list or handle in backend.
     
     const preferredDays = Array.from(document.querySelectorAll('#weekdaysContainer input:checked'))
         .map(cb => parseInt(cb.value));
@@ -246,7 +273,10 @@ async function searchAppointments() {
     // Time range logic: Desktop uses simple hours 4-19
     const hFrom = document.getElementById('hourFrom').value.padStart(2, '0') + ":00";
     const hTo = document.getElementById('hourTo').value.padStart(2, '0') + ":00";
-
+    const dFrom = document.getElementById('dateFrom').value;
+    
+    // Prosta obsługa daty 'excluded' - na razie pusta, można rozwinąć
+    
     const payload = {
         profile: currentProfile,
         specialty_ids: specVal ? specVal.split(',').map(Number) : [],
@@ -254,7 +284,7 @@ async function searchAppointments() {
         clinic_ids: Array.from(selectedClinics),
         preferred_days: preferredDays,
         time_range: { start: hFrom, end: hTo },
-        excluded_dates: [] // Not implemented in basic UI yet
+        excluded_dates: [] 
     };
 
     const btn = document.getElementById('searchBtn');
@@ -275,10 +305,11 @@ async function searchAppointments() {
             renderResults();
             showToast(`Znaleziono: ${searchResults.length}`, 'success');
         } else {
-            showToast('Błąd: ' + data.error, 'error');
+            showToast('Błąd: ' + (data.error || data.message), 'error');
         }
     } catch (e) {
         showToast('Błąd połączenia', 'error');
+        console.error(e);
     } finally {
         btn.textContent = 'Wyszukaj';
         btn.disabled = false;
@@ -287,6 +318,7 @@ async function searchAppointments() {
 
 function renderResults() {
     const tbody = document.getElementById('resultsBody');
+    if (!tbody) return;
     tbody.innerHTML = '';
     
     if (searchResults.length === 0) {
@@ -295,7 +327,7 @@ function renderResults() {
     }
 
     searchResults.forEach((apt, index) => {
-        const dateObj = new Date(apt.datetime || apt.visitDate); // Adjust depending on backend format
+        const dateObj = new Date(apt.datetime || apt.visitDate); 
         const dateStr = dateObj.toLocaleDateString('pl-PL');
         const timeStr = dateObj.toLocaleTimeString('pl-PL', {hour:'2-digit', minute:'2-digit'});
         
@@ -325,7 +357,10 @@ function selectRow(tr, apt) {
 async function bookSelected() {
     if (!selectedAppointment) return;
     
-    if (!confirm(`Czy na pewno chcesz zarezerwować wizytę?\n\nLekarz: ${selectedAppointment.doctor_name}\nData: ${selectedAppointment.datetime}`)) return;
+    const docName = selectedAppointment.doctor_name || selectedAppointment.doctor?.name;
+    const dateVal = selectedAppointment.datetime || selectedAppointment.visitDate;
+
+    if (!confirm(`Czy na pewno chcesz zarezerwować wizytę?\n\nLekarz: ${docName}\nData: ${dateVal}`)) return;
 
     try {
         const resp = await fetch(`${API_URL}/api/v1/appointments/book`, {
@@ -334,7 +369,7 @@ async function bookSelected() {
             credentials: 'include',
             body: JSON.stringify({
                 profile: currentProfile,
-                appointment_id: selectedAppointment.id // Or full object depending on backend needs
+                appointment_id: selectedAppointment.id 
             })
         });
         const data = await resp.json();
@@ -346,7 +381,7 @@ async function bookSelected() {
             selectedAppointment = null;
             document.getElementById('bookSelectedBtn').disabled = true;
         } else {
-            showToast('Błąd rezerwacji: ' + data.message, 'error');
+            showToast('Błąd rezerwacji: ' + (data.message || data.error), 'error');
         }
     } catch (e) {
         showToast('Błąd krytyczny', 'error');
@@ -358,12 +393,12 @@ function exportResults() {
     
     let csvContent = "Data,Godzina,Lekarz,Specjalnosc,Placowka\n";
     searchResults.forEach(row => {
-        const d = new Date(row.datetime);
+        const d = new Date(row.datetime || row.visitDate);
         const date = d.toLocaleDateString();
         const time = d.toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'});
-        const doc = row.doctor_name || '';
-        const spec = row.specialty_name || '';
-        const clin = row.clinic_name || '';
+        const doc = row.doctor_name || row.doctor?.name || '';
+        const spec = row.specialty_name || row.specialty?.name || '';
+        const clin = row.clinic_name || row.clinic?.name || '';
         csvContent += `${date},${time},"${doc}","${spec}","${clin}"\n`;
     });
 
@@ -378,15 +413,18 @@ function exportResults() {
 }
 
 function resetFilters() {
-    document.getElementById('specialtySelect').value = "";
-    handleSpecialtyChange(); // Resets doctors
+    const specSel = document.getElementById('specialtySelect');
+    if (specSel) {
+        specSel.value = "";
+        handleSpecialtyChange(); // Resets doctors
+    }
     clearSelection('doctorsList');
     clearSelection('clinicsList');
     setDefaultDates();
     // Reset checkboxes
     document.querySelectorAll('#weekdaysContainer input').forEach(cb => cb.checked = true);
-    document.getElementById('hourFrom').value = 4;
-    document.getElementById('hourTo').value = 19;
+    if (document.getElementById('hourFrom')) document.getElementById('hourFrom').value = 4;
+    if (document.getElementById('hourTo')) document.getElementById('hourTo').value = 19;
 }
 
 // =========================
@@ -394,6 +432,7 @@ function resetFilters() {
 // =========================
 function showToast(msg, type) {
     const t = document.getElementById('toast');
+    if (!t) return;
     t.textContent = msg;
     t.className = `toast show`;
     t.style.backgroundColor = type === 'error' ? '#dc3545' : '#28a745';
@@ -402,29 +441,38 @@ function showToast(msg, type) {
 
 function toggleProfilesModal() {
     const el = document.getElementById('profilesModal');
+    if (!el) return;
     if (el.classList.contains('hidden')) el.classList.remove('hidden');
     else el.classList.add('hidden');
 }
 
 // Obsługa dodawania profilu
-document.getElementById('addProfileForm').addEventListener('submit', async (e) => {
-    e.preventDefault();
-    const name = document.getElementById('newProfileName').value;
-    const login = document.getElementById('newProfileLogin').value;
-    const pass = document.getElementById('newProfilePass').value;
+const addProfForm = document.getElementById('addProfileForm');
+if (addProfForm) {
+    addProfForm.addEventListener('submit', async (e) => {
+        e.preventDefault();
+        const name = document.getElementById('newProfileName').value;
+        const login = document.getElementById('newProfileLogin').value;
+        const pass = document.getElementById('newProfilePass').value;
 
-    const resp = await fetch(`${API_URL}/api/v1/profiles/add`, {
-        method: 'POST',
-        headers: {'Content-Type': 'application/json'},
-        credentials: 'include',
-        body: JSON.stringify({ name, login, password: pass })
+        try {
+            const resp = await fetch(`${API_URL}/api/v1/profiles/add`, {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                credentials: 'include',
+                body: JSON.stringify({ name, login, password: pass })
+            });
+            const data = await resp.json();
+            if (data.success) {
+                showToast('Profil dodany', 'success');
+                loadProfiles();
+                e.target.reset();
+            } else {
+                showToast('Błąd: ' + data.error, 'error');
+            }
+        } catch (e) {
+            console.error(e);
+            showToast('Błąd połączenia', 'error');
+        }
     });
-    const data = await resp.json();
-    if (data.success) {
-        showToast('Profil dodany', 'success');
-        loadProfiles();
-        e.target.reset();
-    } else {
-        showToast('Błąd: ' + data.error, 'error');
-    }
-});
+}
