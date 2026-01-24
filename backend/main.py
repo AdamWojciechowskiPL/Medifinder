@@ -145,7 +145,8 @@ def add_profile():
             user_email=user_email,
             login=data.get('login'), 
             password=data.get('password'), 
-            name=data.get('name')
+            name=data.get('name'),
+            is_child_account=data.get('is_child_account', False) # Odbieramy flagę dziecka
         )
         return jsonify({'success': True, 'message': 'Profil dodany'}), 201
     except Exception as e: return jsonify({'success': False, 'error': str(e)}), 500
