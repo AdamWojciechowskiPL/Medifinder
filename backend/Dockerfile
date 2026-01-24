@@ -28,7 +28,7 @@ COPY backend/requirements.txt ./backend/
 RUN pip install --no-cache-dir --upgrade pip setuptools wheel && \
     pip install --no-cache-dir -r ./backend/requirements.txt
 
-# KLUCZOWA ZMIANA: Kopiujemy CAŁY folder app/ (z MedicoverApp)
+# Kopiujemy CAŁY folder app/ (z MedicoverApp)
 COPY app/ ./app/
 
 # Kopiujemy backend
@@ -40,11 +40,14 @@ COPY config/ ./config/
 # Tworzymy dodatkowe katalogi
 RUN mkdir -p /app/backend/config /app/backend/app
 
-EXPOSE 5000
+# Railway dynamicznie ustawia PORT - nie hardcoduj
+EXPOSE ${PORT:-5000}
 
 HEALTHCHECK --interval=30s --timeout=10s --start-period=10s --retries=3 \
-    CMD curl -f http://localhost:5000/health || exit 1
+    CMD curl -f http://localhost:${PORT:-5000}/health || exit 1
 
 # Startujemy z katalogu backend
 WORKDIR /app/backend
-CMD ["gunicorn", "--bind", "0.0.0.0:5000", "--workers", "2", "--timeout", "120", "--access-logfile", "-", "--error-logfile", "-", "main:app"]
+
+# KLUCZOWA ZMIANA: Użyj zmiennej środowiskowej PORT z Railway
+CMD gunicorn --bind 0.0.0.0:${PORT:-5000} --workers 2 --timeout 120 --access-logfile - --error-logfile - main:app
