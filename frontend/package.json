@@ -3,14 +3,10 @@
   "version": "1.0.0",
   "private": true,
   "scripts": {
-    "dev": "next dev",
-    "build": "next build",
-    "start": "next start -p ${PORT:-3000}",
-    "lint": "next lint"
+    "build": "echo 'No build step for static site'",
+    "start": "serve -s . -l ${PORT:-3000}"
   },
   "dependencies": {
-    "next": "^14.1.0",
-    "react": "^18.2.0",
-    "react-dom": "^18.2.0"
+    "serve": "^14.2.1"
   }
 }
