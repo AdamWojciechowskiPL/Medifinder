@@ -37,8 +37,8 @@ COPY frontend/ ./frontend/
 # Kopiujemy backend
 COPY backend/ ./backend/
 
-# Kopiujemy config (jeśli potrzebny)
-COPY config/ ./config/
+# Kopiujemy config_seed (dane startowe do woluminu)
+COPY config_seed/ ./config_seed/
 
 # Tworzymy dodatkowe katalogi
 RUN mkdir -p /app/backend/config /app/backend/app
