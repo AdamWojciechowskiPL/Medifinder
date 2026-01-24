@@ -90,7 +90,8 @@ def require_login(fn):
 
 @app.route('/auth/login')
 def auth_login():
-    if 'google' not in oauth:
+    # Zmieniono sposób sprawdzania zarejestrowanego klienta (obiekt OAuth nie jest iterowalny)
+    if not getattr(oauth, 'google', None):
         return jsonify({'success': False, 'error': 'OAuth nie jest skonfigurowany'}), 500
     redirect_uri = url_for('auth_callback', _external=True)
     return oauth.google.authorize_redirect(redirect_uri)
