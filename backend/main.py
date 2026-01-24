@@ -165,6 +165,56 @@ def add_profile():
         return jsonify({'success': False, 'error': str(e)}), 500
 
 
+# ======== DICTIONARIES =========
+
+@app.route('/api/v1/dictionaries/specialties', methods=['GET'])
+@require_login
+def get_specialties():
+    if not med_app: return jsonify({'success': False, 'error': 'App not init'}), 500
+    try:
+        profile_name = request.args.get('profile')
+        is_child = False
+        if profile_name:
+            prof = med_app.profile_manager.get_profile(profile_name)
+            if prof: is_child = prof.is_child_account
+        
+        data = med_app.specialty_manager.data
+        result = []
+        for name, details in data.items():
+            if is_child:
+                if not details.get("for_adult_account_only", False):
+                    result.append({"name": name, "ids": details["ids"]})
+            else:
+                if not details.get("for_child_account_only", False):
+                    result.append({"name": name, "ids": details["ids"]})
+        
+        return jsonify({'success': True, 'data': sorted(result, key=lambda x: x['name'])})
+    except Exception as e:
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+@app.route('/api/v1/dictionaries/doctors', methods=['GET'])
+@require_login
+def get_doctors():
+    if not med_app: return jsonify({'success': False, 'error': 'App not init'}), 500
+    try:
+        data = med_app.doctor_manager.get_all_doctors_data()
+        result = [{"name": k, "id": v["id"], "specialty_ids": v.get("specialty_ids", [])} for k, v in data.items()]
+        return jsonify({'success': True, 'data': sorted(result, key=lambda x: x['name'])})
+    except Exception as e:
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+@app.route('/api/v1/dictionaries/clinics', methods=['GET'])
+@require_login
+def get_clinics():
+    if not med_app: return jsonify({'success': False, 'error': 'App not init'}), 500
+    try:
+        data = med_app.clinic_manager.data
+        result = [{"name": k, "id": v["id"]} for k, v in data.items()]
+        return jsonify({'success': True, 'data': sorted(result, key=lambda x: x['name'])})
+    except Exception as e:
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+
 # ======== APPOINTMENTS (rozszerzone filtrowanie) =========
 
 @app.route('/api/v1/appointments/search', methods=['POST'])
@@ -178,20 +228,24 @@ def search_appointments():
             return jsonify({'success': False, 'error': 'Wymagane pole: profile'}), 400
 
         # nowe pola filtrowania
-        # day_time_ranges: {"1": {"start": "08:00", "end": "16:00"}, "2": {...}, ...}
         day_time_ranges = data.get('day_time_ranges')
         preferred_days = data.get('preferred_days', [])
         time_range = data.get('time_range')
         excluded_dates = data.get('excluded_dates', [])  # lista stringów YYYY-MM-DD
+        
+        # Pobierz IDs zamiast nazw (lub nazwy, jeśli IDs brak - wsteczna kompatybilność, ale GUI wysyła IDs)
+        specialty_ids = data.get('specialty_ids')
+        doctor_ids = data.get('doctor_ids')
+        clinic_ids = data.get('clinic_ids')
 
-        logger.info(f"🔍 Wyszukiwanie wizyt – profil={data.get('profile')}, specialty={data.get('specialty')}")
-        logger.info(f"Dni: {preferred_days}, day_time_ranges={day_time_ranges}, excluded={excluded_dates}")
+        logger.info(f"🔍 Wyszukiwanie wizyt – profil={data.get('profile')}, specialty_ids={specialty_ids}")
+        logger.info(f"Dni: {preferred_days}, excluded={excluded_dates}")
 
         results = med_app.search_appointments(
             profile=data.get('profile'),
-            specialty=data.get('specialty', ''),
-            doctors=data.get('doctors', []),
-            clinics=data.get('clinics', []),
+            specialty_ids=specialty_ids,
+            doctor_ids=doctor_ids,
+            clinic_ids=clinic_ids,
             preferred_days=preferred_days,
             time_range=time_range,
             day_time_ranges=day_time_ranges,
@@ -211,7 +265,7 @@ def auto_book_appointment():
         return jsonify({'success': False, 'error': 'Aplikacja nie zainicjalizowana'}), 500
     try:
         data = request.get_json() or {}
-        required_fields = ['profile', 'specialty']
+        required_fields = ['profile', 'specialty_ids']
         if not all(field in data for field in required_fields):
             return jsonify({'success': False, 'error': f'Brakuje pól: {required_fields}'}), 400
 
@@ -219,12 +273,16 @@ def auto_book_appointment():
         preferred_days = data.get('preferred_days', [1, 2, 3, 4, 5])
         time_range = data.get('time_range', {'start': '08:00', 'end': '20:00'})
         excluded_dates = data.get('excluded_dates', [])
+        
+        specialty_ids = data.get('specialty_ids')
+        doctor_ids = data.get('doctor_ids')
+        clinic_ids = data.get('clinic_ids')
 
         auto_params = {
             'profile': data['profile'],
-            'specialty': data['specialty'],
-            'doctors': data.get('doctors', []),
-            'clinics': data.get('clinics', []),
+            'specialty_ids': specialty_ids,
+            'doctor_ids': doctor_ids,
+            'clinic_ids': clinic_ids,
             'preferred_days': preferred_days,
             'time_range': time_range,
             'day_time_ranges': day_time_ranges,
