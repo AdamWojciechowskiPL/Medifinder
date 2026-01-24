@@ -47,18 +47,40 @@ class ProfileManager:
     def _load_key_from_env(self) -> bytes:
         """
         Pobiera klucz szyfrujący ze zmiennej środowiskowej ENCRYPTION_KEY.
-        Jeśli nie istnieje, generuje tymczasowy (dane przepadną po restarcie serwera!).
+        Jeśli nie istnieje, generuje nowy i wypisuje ostrzenie.
         """
         env_key = os.environ.get("ENCRYPTION_KEY")
-        if env_key:
-            try:
-                return env_key.encode()
-            except Exception as e:
-                self.logger.critical(f"Klucz ENCRYPTION_KEY jest nieprawidłowy: {e}")
-                raise ValueError("Invalid ENCRYPTION_KEY")
         
-        self.logger.warning("⚠️ BRAK ENCRYPTION_KEY W ZMIENNYCH ŚRODOWISKOWYCH! Używam klucza tymczasowego. Po restarcie serwera nie odczytasz zapisanych haseł.")
-        return Fernet.generate_key()
+        if env_key:
+            self.logger.info(f"🔑 Znaleziono ENCRYPTION_KEY w zmiennych środowiskowych (długość: {len(env_key)} znaków)")
+            
+            # Klucz Fernet już JEST w formacie base64, więc używamy go bezpośrednio jako bytes
+            try:
+                # Konwersja string -> bytes (bez dekodowania base64, ponieważ Fernet tego oczekuje)
+                key_bytes = env_key.encode('utf-8')
+                
+                # Walidacja poprzez próbę utworzenia obiektu Fernet
+                Fernet(key_bytes)
+                
+                self.logger.info("✅ ENCRYPTION_KEY jest poprawny i gotowy do użycia")
+                return key_bytes
+                
+            except Exception as e:
+                self.logger.critical(f"❌ ENCRYPTION_KEY jest nieprawidłowy: {e}")
+                self.logger.critical(f"Otrzymano wartość: '{env_key[:10]}...' (długość: {len(env_key)})")
+                self.logger.critical("Poprawny klucz powinien mieć 44 znaki i kończyć się znakiem '='")
+                self.logger.critical("Wygeneruj nowy klucz: python -c 'from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())'")
+                raise ValueError(f"Invalid ENCRYPTION_KEY in environment: {e}")
+        
+        # BRAK KLUCZA W ENV - generujemy tymczasowy
+        self.logger.warning("⚠️ BRAK ENCRYPTION_KEY W ZMIENNYCH ŚRODOWISKOWYCH!")
+        self.logger.warning("⚠️ Generuję klucz tymczasowy. DANE ZOSTANĄ UTRACONE PO RESTARCIE SERWERA!")
+        
+        temp_key = Fernet.generate_key()
+        self.logger.warning(f"🔑 Klucz tymczasowy: {temp_key.decode()}")
+        self.logger.warning("📌 Skopiuj powyższy klucz i dodaj go jako zmienną ENCRYPTION_KEY w Railway!")
+        
+        return temp_key
 
     def _encrypt_password(self, password: str) -> str:
         encrypted = self.cipher.encrypt(password.encode('utf-8'))
