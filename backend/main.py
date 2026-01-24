@@ -13,14 +13,12 @@ from dotenv import load_dotenv
 load_dotenv()
 
 # Konfiguracja ścieżek
-ROOT_DIR = Path(__file__).parent.resolve()
+ROOT_DIR = Path(__file__).parent.parent.resolve()  # /app (parent of /app/backend)
 APP_DIR = ROOT_DIR / "app"
 CONFIG_DIR = ROOT_DIR / "config"
 
-APP_DIR.mkdir(exist_ok=True)
-CONFIG_DIR.mkdir(exist_ok=True)
-
-sys.path.insert(0, str(APP_DIR))
+# Upewnij się, że katalogi istnieją i są w PYTHONPATH
+sys.path.insert(0, str(ROOT_DIR))
 
 logging.basicConfig(
     level=logging.INFO,
@@ -55,10 +53,14 @@ if app.config['GOOGLE_CLIENT_ID'] and app.config['GOOGLE_CLIENT_SECRET']:
 
 med_app = None
 
+# KLUCZOWA ZMIANA: Import z app.main zamiast main (uniknięcie circular import)
 try:
-    from main import MedicoverApp
+    from app.main import MedicoverApp
+    logger.info("✅ MedicoverApp zaimportowany poprawnie")
 except ImportError as e:
-    logger.error(f"Nie można zaimportować MedicoverApp: {e}")
+    logger.error(f"❌ Nie można zaimportować MedicoverApp: {e}")
+    logger.error(f"PYTHONPATH: {sys.path}")
+    logger.error(f"APP_DIR: {APP_DIR}, exists: {APP_DIR.exists()}")
 
 
 def init_app():
@@ -68,7 +70,7 @@ def init_app():
         logger.info("✅ Medifinder zainicjalizowany")
         return True
     except Exception as e:
-        logger.error(f"❌ Błąd inicjalizacji: {e}")
+        logger.error(f"❌ Błąd inicjalizacji: {e}", exc_info=True)
         return False
 
 
@@ -124,7 +126,7 @@ def auth_me():
 
 @app.route('/health', methods=['GET'])
 def health_check():
-    return jsonify({'status': 'ok', 'service': 'Medifinder API', 'version': '1.1.0'}), 200
+    return jsonify({'status': 'ok', 'service': 'Medifinder API', 'version': '1.2.0'}), 200
 
 
 # ======== PROFILES =========
