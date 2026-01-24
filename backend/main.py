@@ -5,6 +5,7 @@ import os
 import sys
 import shutil
 import logging
+import json
 from pathlib import Path
 from datetime import datetime, date
 
@@ -65,15 +66,30 @@ def seed_config_files():
                         
                         logger.info(f"🔍 {filename}: SRC={src_size}B, DST={dst_size}B")
 
-                        # Jeśli plik jest mniejszy niż 10 bajtów (pusty/uszkodzony)
+                        # 1. Sprawdź czy plik jest pusty/uszkodzony (< 10B)
                         if dst_size < 10 and filename != "profiles.json":
                             should_copy = True
                             reason = f"Plik docelowy zbyt mały ({dst_size}B)"
                         
-                        # Dla specialties.json zawsze wymuszamy nadpisanie jeśli jest mniejszy niż seed
-                        elif filename == "specialties.json" and dst_size < src_size:
-                             should_copy = True
-                             reason = f"Słownik niekompletny ({dst_size}B < {src_size}B)"
+                        # 2. Sprawdź czy plik nie jest przypadkiem metadanymi JSON zamiast właściwą treścią (błąd z przeszłości)
+                        # Sprawdzamy, czy plik zawiera klucz "type": "file" na początku
+                        elif filename != "profiles.json":
+                            with open(dst, 'r', encoding='utf-8') as f:
+                                try:
+                                    first_chars = f.read(50)
+                                    if '"type":"file"' in first_chars or '"type": "file"' in first_chars:
+                                        should_copy = True
+                                        reason = "Wykryto błędną zawartość (metadane zamiast danych)"
+                                except Exception:
+                                    pass
+
+                        # 3. Dla słowników statycznych: zawsze wymuszamy nadpisanie jeśli jest mniejszy niż seed
+                        if not should_copy and filename in ["specialties.json", "clinics.json", "doctors.json"]:
+                            # Jeśli plik w volume jest mniejszy o ponad 20% od seeda, to podejrzane
+                            # (np. specialties.json 600B vs 3000B)
+                             if dst_size < src_size * 0.8:
+                                 should_copy = True
+                                 reason = f"Plik docelowy znacznie mniejszy od oryginału ({dst_size}B < {src_size}B)"
                              
                     except Exception as e:
                         logger.error(f"Błąd sprawdzania pliku {dst}: {e}")
