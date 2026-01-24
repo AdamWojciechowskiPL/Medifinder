@@ -1,6 +1,7 @@
 // Medifinder Web - Desktop Logic Replica
-const API_URL = 'https://medifinder-production.up.railway.app';
-const AUTH_URL = `${API_URL}/auth`;
+// Ustawienie na pusty ciąg znaków, ponieważ teraz frontend jest serwowany z tej samej domeny co backend
+const API_URL = '';
+const AUTH_URL = '/auth';
 
 let currentProfile = null;
 let profiles = [];
@@ -33,7 +34,6 @@ async function checkAuth() {
         const resp = await fetch(`${AUTH_URL}/me`, { credentials: 'include' });
         const data = await resp.json();
         
-        // Logowanie debugujące, aby zobaczyć co zwraca backend
         console.log('Auth check response:', data);
 
         if (data.authenticated) {
