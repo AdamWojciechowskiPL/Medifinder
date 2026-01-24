@@ -17,7 +17,7 @@ load_dotenv()
 ROOT_DIR = Path(__file__).parent.parent.resolve()  # /app (parent of /app/backend)
 APP_DIR = ROOT_DIR / "app"
 CONFIG_DIR = ROOT_DIR / "config"
-FRONTEND_DIR = ROOT_DIR / "frontend"  # Ścieżka do plików frontendowych
+FRONTEND_DIR = ROOT_DIR / "frontend"
 
 # Upewnij się, że katalogi istnieją i są w PYTHONPATH
 sys.path.insert(0, str(ROOT_DIR))
@@ -38,12 +38,11 @@ app.secret_key = os.environ.get("FLASK_SECRET_KEY", "dev-secret-change-me")
 app.config['JSON_AS_ASCII'] = False
 app.config['MAX_CONTENT_LENGTH'] = 16 * 1024 * 1024
 
-# Przy Single Origin (serwowanie frontu z backendu) te ustawienia są bezpieczniejsze i prostsze
+# Przy Single Origin (serwowanie frontu z backendu) te ustawienia są bezpieczniejsze
 app.config['SESSION_COOKIE_SAMESITE'] = 'Lax' 
 app.config['SESSION_COOKIE_SECURE'] = True
 app.config['SESSION_COOKIE_HTTPONLY'] = True
 
-# CORS - teraz technicznie mniej potrzebny, ale zostawiamy dla developmentu
 CORS(app, supports_credentials=True)
 
 # Konfiguracja OAuth (Google)
@@ -81,20 +80,13 @@ def init_app():
         logger.error(f"❌ Błąd inicjalizacji: {e}", exc_info=True)
         return False
 
-# ======== SERWOWANIE FRONTENDU (Single Origin) =========
+# ======== API & AUTH ROUTES (Defined FIRST for priority) =========
 
-@app.route('/')
-def index():
-    return send_from_directory(app.static_folder, 'index.html')
+@app.route('/health', methods=['GET'])
+def health_check():
+    return jsonify({'status': 'ok', 'service': 'Medifinder API', 'version': '1.3.1'}), 200
 
-@app.route('/<path:path>')
-def serve_static(path):
-    if os.path.exists(os.path.join(app.static_folder, path)):
-        return send_from_directory(app.static_folder, path)
-    return send_from_directory(app.static_folder, 'index.html')
-
-# ======== AUTH =========
-
+# AUTH
 def require_login(fn):
     from functools import wraps
     @wraps(fn)
@@ -121,7 +113,6 @@ def auth_callback():
             'name': user_info.get('name')
         }
         logger.info(f"🔐 Zalogowano użytkownika {session['user']['email']}")
-        # Przekierowanie na stronę główną (tą samą domenę)
         return redirect('/')
     except Exception as e:
         logger.error(f"❌ Błąd autoryzacji: {e}", exc_info=True)
@@ -139,12 +130,7 @@ def auth_me():
         return jsonify({'authenticated': False})
     return jsonify({'authenticated': True, 'user': session['user']})
 
-# ======== API ENDPOINTS (Bez zmian logiki, tylko prefix) =========
-
-@app.route('/health', methods=['GET'])
-def health_check():
-    return jsonify({'status': 'ok', 'service': 'Medifinder API', 'version': '1.3.0'}), 200
-
+# API V1
 @app.route('/api/v1/profiles', methods=['GET'])
 @require_login
 def get_profiles():
@@ -236,6 +222,24 @@ def book_appointment():
         result = med_app.book_appointment(profile=data.get('profile'), appointment_id=data.get('appointment_id'))
         return jsonify({'success': True, 'message': 'Rezerwacja OK', 'data': result}), 200
     except Exception as e: return jsonify({'success': False, 'error': str(e)}), 500
+
+# ======== SERVING FRONTEND (Defined LAST) =========
+
+@app.route('/')
+def index():
+    return send_from_directory(app.static_folder, 'index.html')
+
+@app.route('/<path:path>')
+def serve_static(path):
+    # Safety: Do not serve index.html for API/Auth calls that missed their routes
+    if path.startswith('api/') or path.startswith('auth/'):
+        return jsonify({'error': 'Not found'}), 404
+        
+    if os.path.exists(os.path.join(app.static_folder, path)):
+        return send_from_directory(app.static_folder, path)
+        
+    # SPA Fallback
+    return send_from_directory(app.static_folder, 'index.html')
 
 if __name__ == '__main__':
     if not init_app(): sys.exit(1)
