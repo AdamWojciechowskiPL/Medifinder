@@ -61,7 +61,7 @@ class MedicoverClient:
         progress_callback = self.config_data.get('progress_callback')
         try:
             self.authenticator = MedicoverAuthenticator(
-                headless=self.config_data.get('headless', False),
+                headless=self.config_data.get('headless', True), # Force headless usually for backend
                 progress_callback=progress_callback
             )
             self.logger.info(f"Rozpoczynanie procesu logowania dla użytkownika {username}...")
@@ -115,9 +115,14 @@ class MedicoverClient:
         max_retries = 1
         for attempt in range(max_retries + 1):
             try:
+                # LAZY LOGIN: Jeśli nie jesteśmy zalogowani, spróbuj teraz
                 if not self.is_logged_in():
-                    # Jeśli nie jesteśmy zalogowani, od razu rzuć wyjątek do GUI
-                    raise LoginRequiredException("Sesja wygasła lub nie została zainicjowana.")
+                    if self.username and self.password:
+                        self.logger.info("Sesja nieaktywna (Lazy Login). Próba automatycznego logowania...")
+                        if not self._perform_relogin():
+                             raise LoginRequiredException("Nie udało się zalogować automatycznie.")
+                    else:
+                        raise LoginRequiredException("Sesja wygasła lub nie została zainicjowana.")
                 
                 try:
                     # Główna próba wywołania API
@@ -160,8 +165,14 @@ class MedicoverClient:
         max_retries = 1
         for attempt in range(max_retries + 1):
             try:
+                # LAZY LOGIN
                 if not self.is_logged_in():
-                    raise LoginRequiredException("Sesja wygasła lub nie została zainicjowana.")
+                    if self.username and self.password:
+                        self.logger.info("Sesja nieaktywna (Lazy Login). Próba automatycznego logowania...")
+                        if not self._perform_relogin():
+                             raise LoginRequiredException("Nie udało się zalogować automatycznie.")
+                    else:
+                         raise LoginRequiredException("Sesja wygasła lub nie została zainicjowana.")
                 
                 return self.api.book_appointment(booking_string)
                 
