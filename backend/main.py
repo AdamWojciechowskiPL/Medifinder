@@ -31,12 +31,18 @@ app = Flask(__name__)
 # Konfiguracja dla reverse proxy (np. Railway), aby Flask wiedział, że działa za https
 app.wsgi_app = ProxyFix(app.wsgi_app, x_proto=1, x_host=1)
 
-CORS(app, supports_credentials=True)
-
-# Sekret dla sesji (USTAW w env w Railway!)
+# === KONFIGURACJA SESJI I COOKIES (CRITICAL FIX FOR CORS) ===
 app.secret_key = os.environ.get("FLASK_SECRET_KEY", "dev-secret-change-me")
 app.config['JSON_AS_ASCII'] = False
 app.config['MAX_CONTENT_LENGTH'] = 16 * 1024 * 1024
+
+# Ustawienia niezbędne dla ciasteczek cross-site (Frontend na innej domenie niż Backend)
+app.config['SESSION_COOKIE_SAMESITE'] = 'None'
+app.config['SESSION_COOKIE_SECURE'] = True
+app.config['SESSION_COOKIE_HTTPONLY'] = True
+
+# CORS musi pozwalać na credentials
+CORS(app, supports_credentials=True)
 
 # Konfiguracja OAuth (Google)
 oauth = OAuth(app)
