@@ -12,23 +12,43 @@ from .data_manager import SpecialtyManager, DoctorManager, ClinicManager
 
 class MedicoverApp:
     def __init__(self, config_dir: Path):
-        self.config = Config(config_dir / "credentials.json")
-        self._setup_logging()
+        # Najpierw prosty logging, żeby zobaczyć błędy inicjalizacji
         self.logger = logging.getLogger(self.__class__.__name__)
         
+        try:
+            self.config = Config(config_dir / "credentials.json")
+        except Exception as e:
+            self.logger.error(f"Błąd ładowania konfiguracji: {e}", exc_info=True)
+            raise
+            
+        self._setup_logging()
+        
         # Managery
-        self.profile_manager = ProfileManager(config_dir)
+        try:
+            self.profile_manager = ProfileManager(config_dir)
+            self.logger.info("✅ ProfileManager zainicjalizowany")
+        except Exception as e:
+            self.logger.error(f"❌ Błąd inicjalizacji ProfileManager: {e}", exc_info=True)
+            raise
+            
         # Słownik klientów per użytkownik email: { "email": MedicoverClient, ... }
         self._user_clients: Dict[str, MedicoverClient] = {}
         
-        self.specialty_manager = SpecialtyManager(config_dir / "specialties.json")
-        self.doctor_manager = DoctorManager(config_dir / "doctors.json")
-        self.clinic_manager = ClinicManager(config_dir / "clinics.json")
+        try:
+            self.specialty_manager = SpecialtyManager(config_dir / "specialties.json")
+            self.doctor_manager = DoctorManager(config_dir / "doctors.json")
+            self.clinic_manager = ClinicManager(config_dir / "clinics.json")
+            self.logger.info("✅ Data managers zainicjalizowane")
+        except Exception as e:
+            self.logger.error(f"❌ Błąd inicjalizacji data managers: {e}", exc_info=True)
+            raise
         
         # Global client fallback (legacy GUI)
         self.client: Optional[MedicoverClient] = None
         self.current_profile: Optional[str] = None
         self.config_dir = config_dir
+        
+        self.logger.info("✅ MedicoverApp w pełni zainicjalizowany")
 
     def _update_data_from_appointments(self, appointments: List[Dict[str, Any]]) -> None:
         if not appointments: return
@@ -47,11 +67,31 @@ class MedicoverApp:
             self.logger.info(f"Baza zaktualizowana. Lekarze: {doctors_updated}, Placówki: {clinics_updated}.")
             
     def _setup_logging(self) -> None:
+        """Konfiguruje logging - bezpieczna wersja bez wymuszania plików."""
         log_config = self.config.get('logging', {})
+        level = log_config.get('level', 'INFO').upper()
+        format_str = log_config.get('format', '%(asctime)s - %(name)s - %(levelname)s - %(message)s')
+        
+        # Tylko stdout - bezpieczne w każdym środowisku
+        handlers = [logging.StreamHandler(sys.stdout)]
+        
+        # Opcjonalnie dodaj file handler jeśli środowisko to wspiera
+        try:
+            log_file = Path('medicover_app.log')
+            # Test zapisu
+            log_file.touch(exist_ok=True)
+            file_handler = logging.FileHandler(log_file, encoding='utf-8')
+            handlers.append(file_handler)
+            self.logger.info(f"Logowanie do pliku: {log_file}")
+        except Exception as e:
+            # Ignoruj błąd - logujemy tylko do konsoli
+            self.logger.warning(f"Nie można utworzyć pliku logu, używam tylko stdout: {e}")
+        
         logging.basicConfig(
-            level=log_config.get('level', 'INFO').upper(),
-            format=log_config.get('format', '%(asctime)s - %(name)s - %(levelname)s - %(message)s'),
-            handlers=[logging.StreamHandler(sys.stdout), logging.FileHandler('medicover_app.log', encoding='utf-8')]
+            level=level,
+            format=format_str,
+            handlers=handlers,
+            force=True  # Nadpisz istniejącą konfigurację
         )
 
     # === User-Aware Methods (Web) ===
@@ -100,7 +140,7 @@ class MedicoverApp:
             self.logger.info(f"User {user_email}: Profil '{name}' dodany pomyślnie")
             return {'success': result}
         except Exception as e:
-            self.logger.error(f"User {user_email}: Błąd dodawania profilu: {e}")
+            self.logger.error(f"User {user_email}: Błąd dodawania profilu: {e}", exc_info=True)
             raise
 
     def search_appointments(self, 
