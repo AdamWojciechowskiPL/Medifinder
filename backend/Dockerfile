@@ -4,21 +4,22 @@ FROM python:3.11-slim
 ENV PYTHONUNBUFFERED=1 \
     PYTHONDONTWRITEBYTECODE=1 \
     PIP_NO_CACHE_DIR=1 \
-    PIP_DISABLE_PIP_VERSION_CHECK=1
+    PIP_DISABLE_PIP_VERSION_CHECK=1 \
+    CHROME_BIN=/usr/bin/chromium \
+    CHROMEDRIVER_BIN=/usr/bin/chromedriver
 
-# Zainstalowanie systemowych zależności (Chrome i ChromeDriver)
+# Zainstalowanie systemowych zależności (Chromium i ChromeDriver)
 RUN apt-get update && apt-get install -y --no-install-recommends \
-    chromium-browser \
+    chromium \
     chromium-driver \
     fonts-liberation \
     xdg-utils \
-    libu1 \
-    libappindicator1 \
-    libindicator7 \
     libxss1 \
     lsb-release \
     xvfb \
     ca-certificates \
+    curl \
+    wget \
     && rm -rf /var/lib/apt/lists/* \
     && apt-get clean
 
