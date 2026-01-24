@@ -1,3 +1,6 @@
+# backend/main.py
+
+# ... (imports remain the same)
 import os
 import sys
 import logging
@@ -14,44 +17,32 @@ from dotenv import load_dotenv
 load_dotenv()
 
 # Konfiguracja ścieżek
-ROOT_DIR = Path(__file__).parent.parent.resolve()  # /app (parent of /app/backend)
+ROOT_DIR = Path(__file__).parent.parent.resolve()
 APP_DIR = ROOT_DIR / "app"
 CONFIG_DIR = ROOT_DIR / "config"
 FRONTEND_DIR = ROOT_DIR / "frontend"
 
-# Upewnij się, że katalogi istnieją i są w PYTHONPATH
 sys.path.insert(0, str(ROOT_DIR))
 
-logging.basicConfig(
-    level=logging.INFO,
-    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
-)
+logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
 logger = logging.getLogger(__name__)
 
-# Konfiguracja Flask do serwowania plików statycznych z folderu frontend
 app = Flask(__name__, static_folder=str(FRONTEND_DIR), static_url_path='')
-# Konfiguracja dla reverse proxy (np. Railway)
 app.wsgi_app = ProxyFix(app.wsgi_app, x_proto=1, x_host=1)
 
-# === KONFIGURACJA SESJI ===
 app.secret_key = os.environ.get("FLASK_SECRET_KEY", "dev-secret-change-me")
 app.config['JSON_AS_ASCII'] = False
 app.config['MAX_CONTENT_LENGTH'] = 16 * 1024 * 1024
-
-# Przy Single Origin (serwowanie frontu z backendu) te ustawienia są bezpieczniejsze
 app.config['SESSION_COOKIE_SAMESITE'] = 'Lax' 
 app.config['SESSION_COOKIE_SECURE'] = True
 app.config['SESSION_COOKIE_HTTPONLY'] = True
 
 CORS(app, supports_credentials=True)
 
-# Konfiguracja OAuth (Google)
 oauth = OAuth(app)
 app.config['GOOGLE_CLIENT_ID'] = os.environ.get('GOOGLE_CLIENT_ID')
 app.config['GOOGLE_CLIENT_SECRET'] = os.environ.get('GOOGLE_CLIENT_SECRET')
-app.config['GOOGLE_DISCOVERY_URL'] = (
-    "https://accounts.google.com/.well-known/openid-configuration"
-)
+app.config['GOOGLE_DISCOVERY_URL'] = "https://accounts.google.com/.well-known/openid-configuration"
 
 if app.config['GOOGLE_CLIENT_ID'] and app.config['GOOGLE_CLIENT_SECRET']:
     oauth.register(
@@ -67,7 +58,6 @@ med_app = None
 try:
     from app.main import MedicoverApp
     logger.info("✅ MedicoverApp zaimportowany poprawnie")
-    # Inicjalizacja natychmiastowa (globalna) dla Gunicorn
     try:
         med_app = MedicoverApp(CONFIG_DIR)
         logger.info("✅ Medifinder zainicjalizowany globalnie")
@@ -76,13 +66,18 @@ try:
 except ImportError as e:
     logger.error(f"❌ Nie można zaimportować klasy MedicoverApp: {e}")
 
-# ======== API & AUTH ROUTES (Defined FIRST for priority) =========
+# Helper to get current user email
+def get_current_user_email():
+    if 'user' in session:
+        return session['user'].get('email')
+    return None
+
+# ======== API & AUTH ROUTES =========
 
 @app.route('/health', methods=['GET'])
 def health_check():
-    return jsonify({'status': 'ok', 'service': 'Medifinder API', 'version': '1.3.1'}), 200
+    return jsonify({'status': 'ok', 'service': 'Medifinder API', 'version': '1.3.2'}), 200
 
-# AUTH
 def require_login(fn):
     from functools import wraps
     @wraps(fn)
@@ -131,8 +126,10 @@ def auth_me():
 @require_login
 def get_profiles():
     if not med_app: return jsonify({'success': False, 'error': 'App not init'}), 500
+    user_email = get_current_user_email()
     try:
-        profiles = med_app.get_available_profiles()
+        # Pass user_email to get scoped profiles
+        profiles = med_app.get_available_profiles(user_email)
         return jsonify({'success': True, 'data': profiles, 'count': len(profiles)}), 200
     except Exception as e: return jsonify({'success': False, 'error': str(e)}), 500
 
@@ -140,9 +137,16 @@ def get_profiles():
 @require_login
 def add_profile():
     if not med_app: return jsonify({'success': False, 'error': 'App not init'}), 500
+    user_email = get_current_user_email()
     try:
         data = request.get_json() or {}
-        med_app.add_profile(data.get('login'), data.get('password'), data.get('name'))
+        # Pass user_email to bind profile to this user
+        med_app.add_profile(
+            user_email=user_email,
+            login=data.get('login'), 
+            password=data.get('password'), 
+            name=data.get('name')
+        )
         return jsonify({'success': True, 'message': 'Profil dodany'}), 201
     except Exception as e: return jsonify({'success': False, 'error': str(e)}), 500
 
@@ -150,11 +154,13 @@ def add_profile():
 @require_login
 def get_specialties():
     if not med_app: return jsonify({'success': False, 'error': 'App not init'}), 500
+    user_email = get_current_user_email()
     try:
         profile_name = request.args.get('profile')
         is_child = False
         if profile_name:
-            prof = med_app.profile_manager.get_profile(profile_name)
+            # Pass user_email to look up correct profile
+            prof = med_app.profile_manager.get_profile(user_email, profile_name)
             if prof: is_child = prof.is_child_account
         
         data = med_app.specialty_manager.data
@@ -193,9 +199,11 @@ def get_clinics():
 @require_login
 def search_appointments():
     if not med_app: return jsonify({'success': False, 'error': 'App not init'}), 500
+    user_email = get_current_user_email()
     try:
         data = request.get_json() or {}
         results = med_app.search_appointments(
+            user_email=user_email, # NEW: Context passed
             profile=data.get('profile'),
             specialty_ids=data.get('specialty_ids'),
             doctor_ids=data.get('doctor_ids'),
@@ -213,35 +221,31 @@ def search_appointments():
 @require_login
 def book_appointment():
     if not med_app: return jsonify({'success': False, 'error': 'App not init'}), 500
+    user_email = get_current_user_email()
     try:
         data = request.get_json() or {}
-        result = med_app.book_appointment(profile=data.get('profile'), appointment_id=data.get('appointment_id'))
+        result = med_app.book_appointment(
+            user_email=user_email, # NEW: Context passed
+            profile=data.get('profile'), 
+            appointment_id=data.get('appointment_id')
+        )
         return jsonify({'success': True, 'message': 'Rezerwacja OK', 'data': result}), 200
     except Exception as e: return jsonify({'success': False, 'error': str(e)}), 500
 
-# ======== SERVING FRONTEND (Defined LAST) =========
-
+# ======== SERVING FRONTEND =========
 @app.route('/')
 def index():
     return send_from_directory(app.static_folder, 'index.html')
 
 @app.route('/<path:path>')
 def serve_static(path):
-    # Safety: Do not serve index.html for API/Auth calls that missed their routes
     if path.startswith('api/') or path.startswith('auth/'):
         return jsonify({'error': 'Not found'}), 404
-        
     if os.path.exists(os.path.join(app.static_folder, path)):
         return send_from_directory(app.static_folder, path)
-        
-    # SPA Fallback
     return send_from_directory(app.static_folder, 'index.html')
 
 if __name__ == '__main__':
-    # Przy uruchamianiu bezpośrednim (python main.py), jeśli inicjalizacja globalna zawiodła, spróbuj ponownie lub wyjdź
-    if not med_app:
-        logger.error("Aplikacja nie została poprawnie zainicjalizowana na poziomie globalnym.")
-        # Opcjonalnie: sys.exit(1)
-        
+    if not med_app: logger.error("Global init failed")
     port = int(os.environ.get('PORT', 5000))
     app.run(host='0.0.0.0', port=port, debug=os.environ.get('FLASK_DEBUG')=='True', threaded=True)
