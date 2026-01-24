@@ -69,7 +69,8 @@
     "Lhosar Yeshi Sangpo": {
         "id": "312414",
         "specialty_ids": [
-            "9"
+            "9",
+            "19046"
         ]
     },
     "Virk Ayyaz": {
@@ -877,6 +878,120 @@
         "id": "513792",
         "specialty_ids": [
             "62742"
+        ]
+    },
+    "Miroshnyk Vitalina": {
+        "id": "561212",
+        "specialty_ids": [
+            "62742"
+        ]
+    },
+    "Kłosiewicz Ewa": {
+        "id": "430732",
+        "specialty_ids": [
+            "62742"
+        ]
+    },
+    "Siudy Bartłomiej": {
+        "id": "609456",
+        "specialty_ids": [
+            "62742"
+        ]
+    },
+    "Kwiatkowska Natalia": {
+        "id": "328078",
+        "specialty_ids": [
+            "62742"
+        ]
+    },
+    "Kleniewska Maria": {
+        "id": "412514",
+        "specialty_ids": [
+            "62742"
+        ]
+    },
+    "Skrok Anna": {
+        "id": "298574",
+        "specialty_ids": [
+            "1188"
+        ]
+    },
+    "Zawadowski Jacek": {
+        "id": "35",
+        "specialty_ids": [
+            "100"
+        ]
+    },
+    "Górecka Aleksandra": {
+        "id": "630870",
+        "specialty_ids": [
+            "1188"
+        ]
+    },
+    "Kwaśniewska Maria": {
+        "id": "6956",
+        "specialty_ids": [
+            "1188"
+        ]
+    },
+    "Kurek-Perlińska Aleksandra": {
+        "id": "112914",
+        "specialty_ids": [
+            "19046"
+        ]
+    },
+    "Internista 5 Telecentrum": {
+        "id": "487782",
+        "specialty_ids": [
+            "19046"
+        ]
+    },
+    "Wójtowicz Bożena": {
+        "id": "143634",
+        "specialty_ids": [
+            "19046"
+        ]
+    },
+    "Rutkowski Tomasz": {
+        "id": "650938",
+        "specialty_ids": [
+            "19046"
+        ]
+    },
+    "Punkt Pobrań 3 Warszawa Wołoska": {
+        "id": "363098",
+        "specialty_ids": [
+            "52106"
+        ]
+    },
+    "Punkt Pobrań 4 Warszawa Wołoska": {
+        "id": "363100",
+        "specialty_ids": [
+            "52106"
+        ]
+    },
+    "Punkt Pobrań 2 Warszawa Wołoska": {
+        "id": "363096",
+        "specialty_ids": [
+            "52106"
+        ]
+    },
+    "Punkt Pobrań 1 Warszawa Wołoska": {
+        "id": "363094",
+        "specialty_ids": [
+            "52106"
+        ]
+    },
+    "Mencel-Bednarek Izabela": {
+        "id": "2050",
+        "specialty_ids": [
+            "200"
+        ]
+    },
+    "Lelito Katarzyna": {
+        "id": "234650",
+        "specialty_ids": [
+            "100"
         ]
     }
 }
