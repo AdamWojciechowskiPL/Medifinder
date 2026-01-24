@@ -454,13 +454,20 @@ if (addProfForm) {
         const name = document.getElementById('newProfileName').value;
         const login = document.getElementById('newProfileLogin').value;
         const pass = document.getElementById('newProfilePass').value;
+        // Read checkbox state
+        const isChild = document.getElementById('newProfileIsChild').checked;
 
         try {
             const resp = await fetch(`${API_URL}/api/v1/profiles/add`, {
                 method: 'POST',
                 headers: {'Content-Type': 'application/json'},
                 credentials: 'include',
-                body: JSON.stringify({ name, login, password: pass })
+                body: JSON.stringify({ 
+                    name, 
+                    login, 
+                    password: pass,
+                    is_child_account: isChild // Send to backend
+                })
             });
             const data = await resp.json();
             if (data.success) {
