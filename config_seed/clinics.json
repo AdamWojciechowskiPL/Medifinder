@@ -1,1 +1,41 @@
-{"type":"file","size":981,"name":"clinics.json","path":"config_seed/clinics.json","sha":"651d045c4e696c2b0ca64fb7cb07e126094376ab","url":"https://api.github.com/repos/AdamWojciechowskiPL/Medifinder/contents/config/clinics.json?ref=5229188ff7e8f2b686e27afd6c08625e370c83b5","git_url":"https://api.github.com/repos/AdamWojciechowskiPL/Medifinder/git/blobs/651d045c4e696c2b0ca64fb7cb07e126094376ab","html_url":"https://github.com/AdamWojciechowskiPL/Medifinder/blob/5229188ff7e8f2b686e27afd6c08625e370c83b5/config/clinics.json","download_url":"https://raw.githubusercontent.com/AdamWojciechowskiPL/Medifinder/5229188ff7e8f2b686e27afd6c08625e370c83b5/config/clinics.json"}
+{
+    "Centrum Medycyny Pracy Medicover - Cybernetyki": {
+        "id": "27276"
+    },
+    "Centrum Medicover Wołoska": {
+        "id": "12396"
+    },
+    "Centrum Medicover Prosta": {
+        "id": "49088"
+    },
+    "Centrum Medicover Elektronowa": {
+        "id": "83484"
+    },
+    "Centrum Medicover Aleje Jerozolimskie": {
+        "id": "12292"
+    },
+    "Centrum Medicover Atrium": {
+        "id": "174"
+    },
+    "Centrum Medyczne Damiana Piaseczno": {
+        "id": "29212"
+    },
+    "Centrum Medicover Klimczaka": {
+        "id": "34136"
+    },
+    "Centrum Medicover Grochowska": {
+        "id": "45054"
+    },
+    "Centrum Medicover Łukiska": {
+        "id": "49284"
+    },
+    "Centrum Medicover Inflancka": {
+        "id": "6896"
+    },
+    "Centrum Medicover Puławska": {
+        "id": "3154"
+    },
+    "e-wizyta": {
+        "id": "19642"
+    }
+}
