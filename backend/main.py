@@ -7,6 +7,7 @@ from datetime import datetime, date
 from flask import Flask, jsonify, request, session, redirect, url_for
 from flask_cors import CORS
 from authlib.integrations.flask_client import OAuth
+from werkzeug.middleware.proxy_fix import ProxyFix  # Dodano dla obsługi proxy (Railway)
 from dotenv import load_dotenv
 
 # Ładowanie zmiennych środowiskowych
@@ -27,6 +28,9 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 app = Flask(__name__)
+# Konfiguracja dla reverse proxy (np. Railway), aby Flask wiedział, że działa za https
+app.wsgi_app = ProxyFix(app.wsgi_app, x_proto=1, x_host=1)
+
 CORS(app, supports_credentials=True)
 
 # Sekret dla sesji (USTAW w env w Railway!)
@@ -93,7 +97,9 @@ def auth_login():
     # Zmieniono sposób sprawdzania zarejestrowanego klienta (obiekt OAuth nie jest iterowalny)
     if not getattr(oauth, 'google', None):
         return jsonify({'success': False, 'error': 'OAuth nie jest skonfigurowany'}), 500
-    redirect_uri = url_for('auth_callback', _external=True)
+    
+    # Wymuś HTTPS dla callbacku, aby uniknąć redirect_uri_mismatch na produkcji (Railway)
+    redirect_uri = url_for('auth_callback', _external=True, _scheme='https')
     return oauth.google.authorize_redirect(redirect_uri)
 
 
