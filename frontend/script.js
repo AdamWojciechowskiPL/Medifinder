@@ -327,9 +327,24 @@ function renderResults() {
     }
 
     searchResults.forEach((apt, index) => {
-        const dateObj = new Date(apt.datetime || apt.visitDate); 
-        const dateStr = dateObj.toLocaleDateString('pl-PL');
-        const timeStr = dateObj.toLocaleTimeString('pl-PL', {hour:'2-digit', minute:'2-digit'});
+        // Fix for "Invalid Date"
+        // Medicover sometimes returns date as ISO string (e.g. 2026-01-25T14:00:00)
+        // or a custom object. Ensure we parse correctly.
+        let dateObj;
+        if (apt.date) {
+            // Some versions return 'date' field directly
+            dateObj = new Date(apt.date);
+        } else if (apt.datetime) {
+            dateObj = new Date(apt.datetime);
+        } else if (apt.visitDate) {
+             dateObj = new Date(apt.visitDate);
+        } else {
+             // Fallback attempt
+             dateObj = new Date();
+        }
+
+        const dateStr = !isNaN(dateObj) ? dateObj.toLocaleDateString('pl-PL') : 'Błąd daty';
+        const timeStr = !isNaN(dateObj) ? dateObj.toLocaleTimeString('pl-PL', {hour:'2-digit', minute:'2-digit'}) : '--:--';
         
         const tr = document.createElement('tr');
         tr.onclick = () => selectRow(tr, apt);
@@ -358,7 +373,7 @@ async function bookSelected() {
     if (!selectedAppointment) return;
     
     const docName = selectedAppointment.doctor_name || selectedAppointment.doctor?.name;
-    const dateVal = selectedAppointment.datetime || selectedAppointment.visitDate;
+    const dateVal = selectedAppointment.datetime || selectedAppointment.visitDate || selectedAppointment.date;
 
     if (!confirm(`Czy na pewno chcesz zarezerwować wizytę?\n\nLekarz: ${docName}\nData: ${dateVal}`)) return;
 
@@ -369,7 +384,7 @@ async function bookSelected() {
             credentials: 'include',
             body: JSON.stringify({
                 profile: currentProfile,
-                appointment_id: selectedAppointment.id 
+                appointment_id: selectedAppointment.appointmentId || selectedAppointment.id 
             })
         });
         const data = await resp.json();
@@ -393,7 +408,7 @@ function exportResults() {
     
     let csvContent = "Data,Godzina,Lekarz,Specjalnosc,Placowka\n";
     searchResults.forEach(row => {
-        const d = new Date(row.datetime || row.visitDate);
+        const d = new Date(row.datetime || row.visitDate || row.date);
         const date = d.toLocaleDateString();
         const time = d.toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'});
         const doc = row.doctor_name || row.doctor?.name || '';
