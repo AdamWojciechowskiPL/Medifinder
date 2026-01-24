@@ -3,6 +3,7 @@
 # ... (imports remain the same)
 import os
 import sys
+import shutil
 import logging
 from pathlib import Path
 from datetime import datetime, date
@@ -20,12 +21,51 @@ load_dotenv()
 ROOT_DIR = Path(__file__).parent.parent.resolve()
 APP_DIR = ROOT_DIR / "app"
 CONFIG_DIR = ROOT_DIR / "config"
+SEED_DIR = ROOT_DIR / "config_seed"  # Nowy katalog z danymi startowymi
 FRONTEND_DIR = ROOT_DIR / "frontend"
 
 sys.path.insert(0, str(ROOT_DIR))
 
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
 logger = logging.getLogger(__name__)
+
+# --- SEEDING LOGIC ---
+def seed_config_files():
+    """
+    Sprawdza, czy w katalogu CONFIG_DIR (volume) brakuje plików json.
+    Jeśli tak, kopiuje je z katalogu SEED_DIR (obraz dockera).
+    """
+    if not CONFIG_DIR.exists():
+        CONFIG_DIR.mkdir(parents=True, exist_ok=True)
+        logger.info(f"Utworzono katalog konfiguracyjny: {CONFIG_DIR}")
+
+    files_to_seed = ["specialties.json", "clinics.json", "doctors.json", "profiles.json"]
+    
+    # Jeśli SEED_DIR nie istnieje (bo np. nie zdążyliśmy zmienić nazwy w repo),
+    # spróbujmy użyć katalogu config jako źródła (w trakcie budowania obrazu może to zadziałać inaczej)
+    # Ale w Twoim przypadku volume przykrywa /app/config, więc źródło musi być inne.
+    # Zakładamy, że w repozytorium zmienisz nazwę folderu "config" na "config_seed"
+    # LUB skopiujesz pliki. 
+    # Dla bezpieczeństwa: jeśli SEED_DIR nie istnieje, a jesteśmy w repo, to nic nie zrobimy.
+    
+    if SEED_DIR.exists():
+        for filename in files_to_seed:
+            src = SEED_DIR / filename
+            dst = CONFIG_DIR / filename
+            
+            if src.exists() and not dst.exists():
+                try:
+                    shutil.copy2(src, dst)
+                    logger.info(f"✅ Skopiowano {filename} z seed do volume.")
+                except Exception as e:
+                    logger.error(f"❌ Błąd kopiowania {filename}: {e}")
+            elif not src.exists() and filename != "profiles.json":
+                logger.warning(f"⚠️ Brak pliku źródłowego {filename} w {SEED_DIR}")
+    else:
+        logger.warning(f"⚠️ Katalog SEED_DIR {SEED_DIR} nie istnieje. Pomijam seedowanie.")
+
+# Uruchom seedowanie przed startem aplikacji
+seed_config_files()
 
 app = Flask(__name__, static_folder=str(FRONTEND_DIR), static_url_path='')
 app.wsgi_app = ProxyFix(app.wsgi_app, x_proto=1, x_host=1)
