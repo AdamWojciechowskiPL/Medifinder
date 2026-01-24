@@ -174,7 +174,11 @@
                         <input type="text" id="newProfileName" placeholder="Nazwa" required>
                         <input type="text" id="newProfileLogin" placeholder="Login" required>
                         <input type="password" id="newProfilePass" placeholder="Hasło" required>
-                        <button type="submit" class="btn btn-success">Dodaj</button>
+                        <div style="margin-top: 10px;">
+                            <input type="checkbox" id="newProfileIsChild">
+                            <label for="newProfileIsChild">Konto dziecka?</label>
+                        </div>
+                        <button type="submit" class="btn btn-success" style="margin-top: 10px;">Dodaj</button>
                     </form>
                     <button class="btn btn-secondary close-modal" onclick="toggleProfilesModal()">Zamknij</button>
                 </div>
