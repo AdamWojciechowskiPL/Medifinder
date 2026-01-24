@@ -15,130 +15,197 @@
                 <div class="status-indicator">
                     <span id="status">🟡 Sprawdzanie stanu...</span>
                 </div>
+                <!-- Auth Bar - widoczny zawsze, ale zmienia treść -->
                 <div class="auth-bar">
                     <span id="userLabel"></span>
-                    <button id="authBtn" class="btn btn-secondary btn-sm">🔐 Zaloguj przez Google</button>
+                    <button id="authBtn" class="btn btn-secondary btn-sm" onclick="loginWithGoogle()">🔐 Zaloguj przez Google</button>
                 </div>
             </div>
         </header>
 
-        <nav class="nav-tabs">
-            <button class="nav-btn active" onclick="switchTab('search', event)">🔍 Wyszukaj</button>
-            <button class="nav-btn" onclick="switchTab('profiles', event)">👤 Profile</button>
-            <button class="nav-btn" onclick="switchTab('results', event)">📋 Wyniki</button>
-            <button class="nav-btn" onclick="switchTab('settings', event)">⚙️ Ustawienia</button>
-        </nav>
+        <!-- Login Overlay - widoczny gdy niezalogowany -->
+        <div id="loginOverlay" class="login-overlay">
+            <div class="login-box">
+                <h2>🔐 Wymagane Logowanie</h2>
+                <p>Aby korzystać z aplikacji Medifinder, musisz się zalogować.</p>
+                <button class="btn btn-primary btn-large" onclick="loginWithGoogle()">
+                    <svg width="24" height="24" viewBox="0 0 24 24" style="vertical-align: middle; margin-right: 10px;">
+                        <path fill="currentColor" d="M21.35,11.1H12.18V13.83H18.69C18.36,17.64 15.19,19.27 12.19,19.27C8.36,19.27 5,16.25 5,12C5,7.9 8.2,4.73 12.2,4.73C15.29,4.73 17.1,6.7 17.1,6.7L19,4.72C19,4.72 16.56,2 12.1,2C6.42,2 2.03,6.8 2.03,12C2.03,17.05 6.16,22 12.25,22C17.6,22 21.5,18.33 21.5,12.91C21.5,11.76 21.35,11.1 21.35,11.1V11.1Z" />
+                    </svg>
+                    Zaloguj przez Google
+                </button>
+            </div>
+        </div>
 
-        <main class="main-content">
-            <section id="search" class="tab-content active">
-                <div class="section-header">
-                    <h2>🔍 Wyszukaj Wizyty</h2>
-                    <p>Zaawansowane filtrowanie: różne godziny dla różnych dni, wykluczanie konkretnych dat</p>
-                </div>
+        <!-- App Content - ukryty gdy niezalogowany -->
+        <div id="appContent" class="hidden">
+            <nav class="nav-tabs">
+                <button class="nav-btn active" onclick="switchTab('search', event)">🔍 Wyszukaj</button>
+                <button class="nav-btn" onclick="switchTab('profiles', event)">👤 Profile</button>
+                <button class="nav-btn" onclick="switchTab('results', event)">📋 Wyniki</button>
+                <button class="nav-btn" onclick="switchTab('settings', event)">⚙️ Ustawienia</button>
+            </nav>
 
-                <form id="searchForm" class="search-form">
-                    <div class="form-group">
-                        <label for="profile" class="form-label">Profil Użytkownika <span class="required">*</span></label>
-                        <select id="profile" class="form-control" required>
-                            <option value="">-- Wybierz profil --</option>
-                        </select>
-                        <small>Aby korzystać, najpierw zaloguj się przez Google i dodaj profil</small>
+            <main class="main-content">
+                <section id="search" class="tab-content active">
+                    <div class="section-header">
+                        <h2>🔍 Wyszukaj Wizyty</h2>
+                        <p>Zaawansowane filtrowanie: różne godziny dla różnych dni, wykluczanie konkretnych dat</p>
                     </div>
 
-                    <div class="form-group">
-                        <label for="specialty" class="form-label">Specjalność <span class="required">*</span></label>
-                        <input type="text" id="specialty" class="form-control" placeholder="np. Kardiologia" required>
-                    </div>
-
-                    <div class="form-group">
-                        <label for="doctors" class="form-label">Lekarze (opcjonalnie)</label>
-                        <input type="text" id="doctors" class="form-control" placeholder="np. Dr. Kowalski, Dr. Nowak">
-                    </div>
-
-                    <div class="form-group">
-                        <label for="clinics" class="form-label">Placówki (opcjonalnie)</label>
-                        <input type="text" id="clinics" class="form-control" placeholder="np. Warszawa, Jerozolimskie">
-                    </div>
-
-                    <div class="form-row">
+                    <form id="searchForm" class="search-form">
                         <div class="form-group">
-                            <label for="timeFrom" class="form-label">Globalnie od godziny</label>
-                            <input type="time" id="timeFrom" class="form-control" value="08:00">
+                            <label for="profile" class="form-label">Profil Użytkownika <span class="required">*</span></label>
+                            <select id="profile" class="form-control" required>
+                                <option value="">-- Wybierz profil --</option>
+                            </select>
                         </div>
+
                         <div class="form-group">
-                            <label for="timeTo" class="form-label">Globalnie do godziny</label>
-                            <input type="time" id="timeTo" class="form-control" value="20:00">
+                            <label for="specialty" class="form-label">Specjalność <span class="required">*</span></label>
+                            <input type="text" id="specialty" class="form-control" placeholder="np. Kardiologia" required>
                         </div>
-                    </div>
 
-                    <div class="form-group" style="grid-column:1/-1;">
-                        <label class="form-label">Godziny per dzień tygodnia</label>
-                        <small>Możesz ustawić inne godziny dla każdego dnia oraz wyłączyć całkowicie wybrane dni.</small>
-                        <div class="day-grid">
-                            <div class="day-row" data-day="1">
-                                <label><input type="checkbox" class="day-enabled" checked> Poniedziałek</label>
-                                <input type="time" class="form-control day-from" value="08:00">
-                                <input type="time" class="form-control day-to" value="20:00">
+                        <div class="form-group">
+                            <label for="doctors" class="form-label">Lekarze (opcjonalnie)</label>
+                            <input type="text" id="doctors" class="form-control" placeholder="np. Dr. Kowalski, Dr. Nowak">
+                        </div>
+
+                        <div class="form-group">
+                            <label for="clinics" class="form-label">Placówki (opcjonalnie)</label>
+                            <input type="text" id="clinics" class="form-control" placeholder="np. Warszawa, Jerozolimskie">
+                        </div>
+
+                        <div class="form-row">
+                            <div class="form-group">
+                                <label for="timeFrom" class="form-label">Globalnie od godziny</label>
+                                <input type="time" id="timeFrom" class="form-control" value="08:00">
                             </div>
-                            <div class="day-row" data-day="2">
-                                <label><input type="checkbox" class="day-enabled" checked> Wtorek</label>
-                                <input type="time" class="form-control day-from" value="08:00">
-                                <input type="time" class="form-control day-to" value="20:00">
-                            </div>
-                            <div class="day-row" data-day="3">
-                                <label><input type="checkbox" class="day-enabled" checked> Środa</label>
-                                <input type="time" class="form-control day-from" value="08:00">
-                                <input type="time" class="form-control day-to" value="20:00">
-                            </div>
-                            <div class="day-row" data-day="4">
-                                <label><input type="checkbox" class="day-enabled" checked> Czwartek</label>
-                                <input type="time" class="form-control day-from" value="08:00">
-                                <input type="time" class="form-control day-to" value="20:00">
-                            </div>
-                            <div class="day-row" data-day="5">
-                                <label><input type="checkbox" class="day-enabled" checked> Piątek</label>
-                                <input type="time" class="form-control day-from" value="08:00">
-                                <input type="time" class="form-control day-to" value="20:00">
-                            </div>
-                            <div class="day-row" data-day="6">
-                                <label><input type="checkbox" class="day-enabled"> Sobota</label>
-                                <input type="time" class="form-control day-from" value="08:00">
-                                <input type="time" class="form-control day-to" value="20:00">
-                            </div>
-                            <div class="day-row" data-day="7">
-                                <label><input type="checkbox" class="day-enabled"> Niedziela</label>
-                                <input type="time" class="form-control day-from" value="08:00">
-                                <input type="time" class="form-control day-to" value="20:00">
+                            <div class="form-group">
+                                <label for="timeTo" class="form-label">Globalnie do godziny</label>
+                                <input type="time" id="timeTo" class="form-control" value="20:00">
                             </div>
                         </div>
+
+                        <div class="form-group" style="grid-column:1/-1;">
+                            <label class="form-label">Godziny per dzień tygodnia</label>
+                            <small>Możesz ustawić inne godziny dla każdego dnia oraz wyłączyć całkowicie wybrane dni.</small>
+                            <div class="day-grid">
+                                <div class="day-row" data-day="1">
+                                    <label><input type="checkbox" class="day-enabled" checked> Poniedziałek</label>
+                                    <input type="time" class="form-control day-from" value="08:00">
+                                    <input type="time" class="form-control day-to" value="20:00">
+                                </div>
+                                <div class="day-row" data-day="2">
+                                    <label><input type="checkbox" class="day-enabled" checked> Wtorek</label>
+                                    <input type="time" class="form-control day-from" value="08:00">
+                                    <input type="time" class="form-control day-to" value="20:00">
+                                </div>
+                                <div class="day-row" data-day="3">
+                                    <label><input type="checkbox" class="day-enabled" checked> Środa</label>
+                                    <input type="time" class="form-control day-from" value="08:00">
+                                    <input type="time" class="form-control day-to" value="20:00">
+                                </div>
+                                <div class="day-row" data-day="4">
+                                    <label><input type="checkbox" class="day-enabled" checked> Czwartek</label>
+                                    <input type="time" class="form-control day-from" value="08:00">
+                                    <input type="time" class="form-control day-to" value="20:00">
+                                </div>
+                                <div class="day-row" data-day="5">
+                                    <label><input type="checkbox" class="day-enabled" checked> Piątek</label>
+                                    <input type="time" class="form-control day-from" value="08:00">
+                                    <input type="time" class="form-control day-to" value="20:00">
+                                </div>
+                                <div class="day-row" data-day="6">
+                                    <label><input type="checkbox" class="day-enabled"> Sobota</label>
+                                    <input type="time" class="form-control day-from" value="08:00">
+                                    <input type="time" class="form-control day-to" value="20:00">
+                                </div>
+                                <div class="day-row" data-day="7">
+                                    <label><input type="checkbox" class="day-enabled"> Niedziela</label>
+                                    <input type="time" class="form-control day-from" value="08:00">
+                                    <input type="time" class="form-control day-to" value="20:00">
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="form-group" style="grid-column:1/-1;">
+                            <label for="excludedDates" class="form-label">Wykluczone konkretne daty (YYYY-MM-DD, po przecinku)</label>
+                            <input type="text" id="excludedDates" class="form-control" placeholder="np. 2026-01-01, 2026-01-06">
+                            <small>Te dni zostaną pominięte, nawet jeśli wypadają w wybranych dniach tygodnia.</small>
+                        </div>
+
+                        <div class="form-group" style="grid-column:1/-1;">
+                            <label>
+                                <input type="checkbox" id="autoBook" name="autoBook">
+                                <span class="checkbox-label">🤖 Automatyczna rezerwacja pierwszej dopasowanej wizyty</span>
+                            </label>
+                        </div>
+
+                        <div class="button-group">
+                            <button type="submit" class="btn btn-primary" id="searchBtn">🔍 Rozpocznij Wyszukiwanie</button>
+                            <button type="reset" class="btn btn-secondary">🔄 Resetuj</button>
+                        </div>
+                    </form>
+                </section>
+
+                <section id="profiles" class="tab-content">
+                    <div class="section-header">
+                        <h2>👤 Zarządzanie Profilami</h2>
+                    </div>
+                    
+                    <div id="addProfileForm" class="hidden">
+                        <h3>Dodaj Nowy Profil</h3>
+                        <form id="profileForm">
+                            <div class="form-group">
+                                <label for="profileName">Nazwa profilu (np. "Ja", "Mama")</label>
+                                <input type="text" id="profileName" class="form-control" required>
+                            </div>
+                            <div class="form-group">
+                                <label for="profileLogin">Login (email/numer karty)</label>
+                                <input type="text" id="profileLogin" class="form-control" required>
+                            </div>
+                            <div class="form-group">
+                                <label for="profilePassword">Hasło</label>
+                                <input type="password" id="profilePassword" class="form-control" required>
+                            </div>
+                            <div class="button-group">
+                                <button type="button" id="saveProfileBtn" class="btn btn-primary">Zapisz</button>
+                                <button type="button" id="cancelProfileBtn" class="btn btn-secondary">Anuluj</button>
+                            </div>
+                        </form>
                     </div>
 
-                    <div class="form-group" style="grid-column:1/-1;">
-                        <label for="excludedDates" class="form-label">Wykluczone konkretne daty (YYYY-MM-DD, po przecinku)</label>
-                        <input type="text" id="excludedDates" class="form-control" placeholder="np. 2026-01-01, 2026-01-06">
-                        <small>Te dni zostaną pominięte, nawet jeśli wypadają w wybranych dniach tygodnia.</small>
+                    <button id="addProfileBtn" class="btn btn-success" style="margin-bottom: 20px;">+ Dodaj Profil</button>
+                    
+                    <div id="profilesList" class="profiles-grid">
+                        <!-- Profile będą tu wstawione przez JS -->
                     </div>
+                </section>
 
-                    <div class="form-group" style="grid-column:1/-1;">
-                        <label>
-                            <input type="checkbox" id="autoBook" name="autoBook">
-                            <span class="checkbox-label">🤖 Automatyczna rezerwacja pierwszej dopasowanej wizyty</span>
-                        </label>
+                <section id="results" class="tab-content">
+                    <div class="section-header">
+                        <h2>📋 Wyniki Wyszukiwania</h2>
                     </div>
-
-                    <div class="button-group">
-                        <button type="submit" class="btn btn-primary" id="searchBtn">🔍 Rozpocznij Wyszukiwanie</button>
-                        <button type="reset" class="btn btn-secondary">🔄 Resetuj</button>
+                    <div id="appointmentsList" class="appointments-grid">
+                        <p class="empty-state">Brak wyników. Rozpocznij wyszukiwanie w zakładce "Wyszukaj".</p>
                     </div>
-                </form>
-            </section>
+                </section>
 
-            <!-- pozostałe sekcje bez zmian -->
-            <!-- profiles/results/settings jak wcześniej -->
-        </main>
+                <section id="settings" class="tab-content">
+                    <div class="section-header">
+                        <h2>⚙️ Ustawienia</h2>
+                    </div>
+                    <div class="settings-content">
+                        <p>Wersja aplikacji: 1.2.0</p>
+                        <p>Status serwera: <span id="serverStatusInfo">Sprawdzanie...</span></p>
+                    </div>
+                </section>
+            </main>
+        </div>
 
         <footer class="footer">
-            <p>🏥 Medifinder v1.1.0 • <span id="serverStatus">--</span> • <a href="#" onclick="openGitHub()">GitHub</a></p>
+            <p>🏥 Medifinder v1.2.0 • <span id="serverStatus">--</span> • <a href="#" onclick="openGitHub()">GitHub</a></p>
         </footer>
     </div>
 
