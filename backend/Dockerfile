@@ -31,6 +31,9 @@ RUN pip install --no-cache-dir --upgrade pip setuptools wheel && \
 # Kopiujemy CAŁY folder app/ (z MedicoverApp)
 COPY app/ ./app/
 
+# Kopiujemy frontend, aby był dostępny dla Flask
+COPY frontend/ ./frontend/
+
 # Kopiujemy backend
 COPY backend/ ./backend/
 
