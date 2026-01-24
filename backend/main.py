@@ -41,24 +41,42 @@ def seed_config_files():
 
     files_to_seed = ["specialties.json", "clinics.json", "doctors.json", "profiles.json"]
     
-    # Jeśli SEED_DIR nie istnieje (bo np. nie zdążyliśmy zmienić nazwy w repo),
-    # spróbujmy użyć katalogu config jako źródła (w trakcie budowania obrazu może to zadziałać inaczej)
-    # Ale w Twoim przypadku volume przykrywa /app/config, więc źródło musi być inne.
-    # Zakładamy, że w repozytorium zmienisz nazwę folderu "config" na "config_seed"
-    # LUB skopiujesz pliki. 
-    # Dla bezpieczeństwa: jeśli SEED_DIR nie istnieje, a jesteśmy w repo, to nic nie zrobimy.
-    
     if SEED_DIR.exists():
         for filename in files_to_seed:
             src = SEED_DIR / filename
             dst = CONFIG_DIR / filename
             
-            if src.exists() and not dst.exists():
-                try:
-                    shutil.copy2(src, dst)
-                    logger.info(f"✅ Skopiowano {filename} z seed do volume.")
-                except Exception as e:
-                    logger.error(f"❌ Błąd kopiowania {filename}: {e}")
+            should_copy = False
+            
+            if src.exists():
+                if not dst.exists():
+                    should_copy = True
+                    logger.info(f"📄 Plik {filename} nie istnieje w volume. Kopiowanie...")
+                else:
+                    # Sprawdź czy plik jest pusty (lub prawie pusty, np. "{}")
+                    try:
+                        size = dst.stat().st_size
+                        # Jeśli plik jest mniejszy niż 10 bajtów, zakładamy że jest pusty/uszkodzony
+                        # i nadpisujemy go danymi z seeda (chyba że to profiles.json, tu ostrożnie)
+                        if size < 10 and filename != "profiles.json":
+                            should_copy = True
+                            logger.warning(f"⚠️ Plik {filename} w volume jest pusty ({size}B). Nadpisywanie z seeda.")
+                        
+                        # Dla specialties.json zawsze wymuszamy nadpisanie jeśli jest mniejszy niż seed (np. pusty vs pełny)
+                        # bo to słownik statyczny
+                        if filename == "specialties.json" and size < src.stat().st_size:
+                             should_copy = True
+                             logger.warning(f"⚠️ Słownik {filename} wygląda na niekompletny. Aktualizacja z seeda.")
+                             
+                    except Exception as e:
+                        logger.error(f"Błąd sprawdzania pliku {dst}: {e}")
+            
+                if should_copy:
+                    try:
+                        shutil.copy2(src, dst)
+                        logger.info(f"✅ Skopiowano {filename} z seed do volume.")
+                    except Exception as e:
+                        logger.error(f"❌ Błąd kopiowania {filename}: {e}")
             elif not src.exists() and filename != "profiles.json":
                 logger.warning(f"⚠️ Brak pliku źródłowego {filename} w {SEED_DIR}")
     else:
