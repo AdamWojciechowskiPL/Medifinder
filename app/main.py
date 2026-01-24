@@ -8,10 +8,10 @@ import sys
 from typing import Optional, List, Dict, Any
 from pathlib import Path
 # Zredukowane, niezbędne importy
-from config import Config
-from profile_manager import ProfileManager
-from medicover_client import MedicoverClient
-from data_manager import SpecialtyManager, DoctorManager, ClinicManager
+from .config import Config
+from .profile_manager import ProfileManager
+from .medicover_client import MedicoverClient
+from .data_manager import SpecialtyManager, DoctorManager, ClinicManager
 
 class MedicoverApp:
     """
