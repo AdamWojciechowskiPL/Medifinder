@@ -1,11 +1,13 @@
 // Medifinder Web - Complete JavaScript
 
 const API_URL = 'https://medifinder-production.up.railway.app';
+const AUTH_URL = `${API_URL}/auth`;
 
 // Stan aplikacji
 let currentProfile = null;
 let profiles = [];
 let appointments = [];
+let currentUser = null;
 
 // =========================
 // INICJALIZACJA
@@ -13,52 +15,8 @@ let appointments = [];
 
 function initializeApp() {
     console.log('🚀 Inicjalizacja Medifinder Web');
-    attachEventListeners();
     checkAuth();
-    loadProfiles();
-}
-
-// =========================
-// EVENT LISTENERS
-// =========================
-
-function attachEventListeners() {
-    // Profile management
-    document.getElementById('addProfileBtn')?.addEventListener('click', showAddProfileForm);
-    document.getElementById('saveProfileBtn')?.addEventListener('click', saveProfile);
-    document.getElementById('cancelProfileBtn')?.addEventListener('click', hideAddProfileForm);
-    
-    // Search
-    document.getElementById('searchBtn')?.addEventListener('click', searchAppointments);
-    document.getElementById('autoBookBtn')?.addEventListener('click', autoBookAppointment);
-    
-    // Auth
-    document.getElementById('loginBtn')?.addEventListener('click', login);
-    document.getElementById('logoutBtn')?.addEventListener('click', logout);
-}
-
-// =========================
-// TAB SWITCHING
-// =========================
-
-function switchTab(tabName) {
-    // Ukryj wszystkie taby
-    document.querySelectorAll('.tab-content').forEach(tab => {
-        tab.classList.remove('active');
-    });
-    
-    // Usuń active z wszystkich przycisków
-    document.querySelectorAll('.tab-btn').forEach(btn => {
-        btn.classList.remove('active');
-    });
-    
-    // Pokaż wybrany tab
-    document.getElementById(tabName + 'Tab')?.classList.add('active');
-    
-    // Zaznacz aktywny przycisk
-    event.target.classList.add('active');
-    
-    console.log(`📦 Przełączono na tab: ${tabName}`);
+    attachEventListeners();
 }
 
 // =========================
@@ -67,33 +25,35 @@ function switchTab(tabName) {
 
 async function checkAuth() {
     try {
-        const response = await fetch(`${API_URL}/auth/me`, {
+        const response = await fetch(`${AUTH_URL}/me`, {
             credentials: 'include'
         });
         const data = await response.json();
         
         if (data.authenticated) {
-            showLoggedIn(data.user);
+            currentUser = data.user;
+            showApp(data.user);
+            loadProfiles();
         } else {
-            showLoggedOut();
+            showLogin();
         }
     } catch (error) {
         console.error('❌ Błąd sprawdzania auth:', error);
-        showLoggedOut();
+        showLogin();
     }
 }
 
-function login() {
-    window.location.href = `${API_URL}/auth/login`;
+function loginWithGoogle() {
+    window.location.href = `${AUTH_URL}/login`;
 }
 
 async function logout() {
     try {
-        await fetch(`${API_URL}/auth/logout`, {
+        await fetch(`${AUTH_URL}/logout`, {
             method: 'POST',
             credentials: 'include'
         });
-        showLoggedOut();
+        showLogin();
         showNotification('Wylogowano pomyślnie', 'success');
     } catch (error) {
         console.error('❌ Błąd wylogowania:', error);
@@ -101,15 +61,79 @@ async function logout() {
     }
 }
 
-function showLoggedIn(user) {
-    document.getElementById('loginSection')?.classList.add('hidden');
-    document.getElementById('loggedInSection')?.classList.remove('hidden');
-    document.getElementById('userName').textContent = user.name || user.email;
+function showApp(user) {
+    document.getElementById('loginOverlay').style.display = 'none';
+    document.getElementById('appContent').classList.remove('hidden');
+    
+    // Update header
+    document.getElementById('userLabel').textContent = user.name || user.email;
+    const authBtn = document.getElementById('authBtn');
+    authBtn.textContent = '🚪 Wyloguj';
+    authBtn.onclick = logout;
 }
 
-function showLoggedOut() {
-    document.getElementById('loginSection')?.classList.remove('hidden');
-    document.getElementById('loggedInSection')?.classList.add('hidden');
+function showLogin() {
+    document.getElementById('loginOverlay').style.display = 'flex';
+    document.getElementById('appContent').classList.add('hidden');
+    
+    // Update header
+    document.getElementById('userLabel').textContent = '';
+    const authBtn = document.getElementById('authBtn');
+    authBtn.textContent = '🔐 Zaloguj przez Google';
+    authBtn.onclick = loginWithGoogle;
+}
+
+// =========================
+// EVENT LISTENERS
+// =========================
+
+function attachEventListeners() {
+    // Search form
+    document.getElementById('searchBtn')?.addEventListener('click', (e) => {
+        e.preventDefault();
+        searchAppointments();
+    });
+
+    // Profile management
+    document.getElementById('addProfileBtn')?.addEventListener('click', showAddProfileForm);
+    document.getElementById('saveProfileBtn')?.addEventListener('click', saveProfile);
+    document.getElementById('cancelProfileBtn')?.addEventListener('click', hideAddProfileForm);
+    
+    // Auto book checkbox
+    document.getElementById('autoBook')?.addEventListener('change', (e) => {
+        const btn = document.getElementById('searchBtn');
+        if (e.target.checked) {
+            btn.textContent = '🤖 Rozpocznij Auto-Rezerwację';
+            btn.classList.add('btn-warning');
+        } else {
+            btn.textContent = '🔍 Rozpocznij Wyszukiwanie';
+            btn.classList.remove('btn-warning');
+        }
+    });
+}
+
+// =========================
+// TAB SWITCHING
+// =========================
+
+function switchTab(tabName, event) {
+    // Ukryj wszystkie taby
+    document.querySelectorAll('.tab-content').forEach(tab => {
+        tab.classList.remove('active');
+    });
+    
+    // Usuń active z wszystkich przycisków
+    document.querySelectorAll('.nav-btn').forEach(btn => {
+        btn.classList.remove('active');
+    });
+    
+    // Pokaż wybrany tab
+    document.getElementById(tabName)?.classList.add('active');
+    
+    // Zaznacz aktywny przycisk
+    if (event) {
+        event.target.classList.add('active');
+    }
 }
 
 // =========================
@@ -155,24 +179,32 @@ function renderProfiles() {
 }
 
 function populateProfileSelects() {
-    const selects = document.querySelectorAll('.profile-select');
-    selects.forEach(select => {
-        select.innerHTML = '<option value="">Wybierz profil</option>' + 
+    const select = document.getElementById('profile');
+    if (select) {
+        select.innerHTML = '<option value="">-- Wybierz profil --</option>' + 
             profiles.map(p => `<option value="${p}">${p}</option>`).join('');
-    });
+    }
 }
 
 function selectProfile(profileName) {
-    currentProfile = profileName;
-    showNotification(`Wybrano profil: ${profileName}`, 'success');
+    const select = document.getElementById('profile');
+    if (select) {
+        select.value = profileName;
+        switchTab('search');
+        document.querySelector('.nav-btn.active').classList.remove('active');
+        document.querySelector('.nav-btn:first-child').classList.add('active'); // Search tab button
+        showNotification(`Wybrano profil: ${profileName}`, 'success');
+    }
 }
 
 function showAddProfileForm() {
     document.getElementById('addProfileForm')?.classList.remove('hidden');
+    document.getElementById('addProfileBtn')?.classList.add('hidden');
 }
 
 function hideAddProfileForm() {
     document.getElementById('addProfileForm')?.classList.add('hidden');
+    document.getElementById('addProfileBtn')?.classList.remove('hidden');
     document.getElementById('profileForm')?.reset();
 }
 
@@ -186,6 +218,8 @@ async function saveProfile() {
         return;
     }
     
+    showLoading(true);
+
     try {
         const response = await fetch(`${API_URL}/api/v1/profiles/add`, {
             method: 'POST',
@@ -206,6 +240,8 @@ async function saveProfile() {
     } catch (error) {
         console.error('❌ Błąd zapisywania profilu:', error);
         showNotification('Błąd połączenia z serwerem', 'error');
+    } finally {
+        showLoading(false);
     }
 }
 
@@ -214,35 +250,76 @@ async function saveProfile() {
 // =========================
 
 async function searchAppointments() {
-    const profile = document.getElementById('searchProfile')?.value;
-    const specialty = document.getElementById('searchSpecialty')?.value;
+    const profile = document.getElementById('profile')?.value;
+    const specialty = document.getElementById('specialty')?.value;
     
     if (!profile) {
         showNotification('Wybierz profil', 'error');
         return;
     }
     
+    // Collect form data
+    const doctors = document.getElementById('doctors').value.split(',').map(s => s.trim()).filter(Boolean);
+    const clinics = document.getElementById('clinics').value.split(',').map(s => s.trim()).filter(Boolean);
+    const timeFrom = document.getElementById('timeFrom').value;
+    const timeTo = document.getElementById('timeTo').value;
+    const excludedDates = document.getElementById('excludedDates').value.split(',').map(s => s.trim()).filter(Boolean);
+    const autoBook = document.getElementById('autoBook').checked;
+
+    // Day ranges
+    const dayTimeRanges = {};
+    document.querySelectorAll('.day-row').forEach(row => {
+        if (row.querySelector('.day-enabled').checked) {
+            const day = row.dataset.day;
+            dayTimeRanges[day] = {
+                start: row.querySelector('.day-from').value,
+                end: row.querySelector('.day-to').value
+            };
+        }
+    });
+
+    const payload = {
+        profile,
+        specialty,
+        doctors,
+        clinics,
+        time_range: { start: timeFrom, end: timeTo },
+        day_time_ranges: dayTimeRanges,
+        excluded_dates: excludedDates,
+        auto_book: autoBook
+    };
+
     showLoading(true);
     
+    const endpoint = autoBook ? `${API_URL}/api/v1/appointments/auto-book` : `${API_URL}/api/v1/appointments/search`;
+
     try {
-        const response = await fetch(`${API_URL}/api/v1/appointments/search`, {
+        const response = await fetch(endpoint, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             credentials: 'include',
-            body: JSON.stringify({ profile, specialty })
+            body: JSON.stringify(payload)
         });
         
         const data = await response.json();
         
         if (data.success) {
-            appointments = data.data;
-            renderAppointments();
-            showNotification(`Znaleziono ${data.count} wizyt`, 'success');
+            if (autoBook) {
+                showNotification(data.message, 'success');
+            } else {
+                appointments = data.data;
+                renderAppointments();
+                switchTab('results');
+                // Update active button manually as we switched programmatically
+                document.querySelectorAll('.nav-btn').forEach(btn => btn.classList.remove('active'));
+                document.querySelectorAll('.nav-btn')[2].classList.add('active'); // Results tab
+                showNotification(`Znaleziono ${data.count} wizyt`, 'success');
+            }
         } else {
-            showNotification('Błąd wyszukiwania: ' + data.error, 'error');
+            showNotification('Błąd: ' + (data.error || data.message), 'error');
         }
     } catch (error) {
-        console.error('❌ Błąd wyszukiwania:', error);
+        console.error('❌ Błąd requestu:', error);
         showNotification('Błąd połączenia z serwerem', 'error');
     } finally {
         showLoading(false);
@@ -254,17 +331,17 @@ function renderAppointments() {
     if (!container) return;
     
     if (appointments.length === 0) {
-        container.innerHTML = '<p class="empty-state">Nie znaleziono wizyt.</p>';
+        container.innerHTML = '<p class="empty-state">Nie znaleziono wizyt pasujących do kryteriów.</p>';
         return;
     }
     
     container.innerHTML = appointments.map(apt => `
         <div class="appointment-card">
             <div class="appointment-info">
-                <h3>${apt.specialty?.name || 'Specjalizacja'}</h3>
-                <p><strong>Lekarz:</strong> ${apt.doctor?.name || 'Brak danych'}</p>
-                <p><strong>Placówka:</strong> ${apt.clinic?.name || 'Brak danych'}</p>
-                <p><strong>Data:</strong> ${apt.visitDate || 'Brak daty'} ${apt.visitTime || ''}</p>
+                <h3>${apt.specialty_name || apt.specialty?.name || 'Wizyta'}</h3>
+                <p><strong>👨‍⚕️ Lekarz:</strong> ${apt.doctor_name || apt.doctor?.name || 'Brak danych'}</p>
+                <p><strong>🏥 Placówka:</strong> ${apt.clinic_name || apt.clinic?.name || 'Brak danych'}</p>
+                <p><strong>📅 Data:</strong> ${apt.date ? new Date(apt.date).toLocaleDateString() : 'Brak daty'} ${apt.time || ''}</p>
             </div>
             <div class="appointment-actions">
                 <button class="btn btn-primary" onclick="bookAppointment('${apt.id}')">Zarezerwuj</button>
@@ -274,13 +351,15 @@ function renderAppointments() {
 }
 
 async function bookAppointment(appointmentId) {
-    const profile = document.getElementById('searchProfile')?.value;
+    const profile = document.getElementById('profile')?.value;
     
     if (!profile) {
         showNotification('Wybierz profil', 'error');
         return;
     }
     
+    showLoading(true);
+
     try {
         const response = await fetch(`${API_URL}/api/v1/appointments/book`, {
             method: 'POST',
@@ -292,44 +371,15 @@ async function bookAppointment(appointmentId) {
         const data = await response.json();
         
         if (data.success) {
-            showNotification('Wizyta zarezerwowana!', 'success');
+            showNotification('✅ Wizyta zarezerwowana pomyślnie!', 'success');
+            // Remove booked appointment from list
+            appointments = appointments.filter(a => a.id !== appointmentId);
+            renderAppointments();
         } else {
             showNotification('Błąd rezerwacji: ' + data.error, 'error');
         }
     } catch (error) {
         console.error('❌ Błąd rezerwacji:', error);
-        showNotification('Błąd połączenia z serwerem', 'error');
-    }
-}
-
-async function autoBookAppointment() {
-    const profile = document.getElementById('autoBookProfile')?.value;
-    const specialty = document.getElementById('autoBookSpecialty')?.value;
-    
-    if (!profile || !specialty) {
-        showNotification('Wybierz profil i specjalizację', 'error');
-        return;
-    }
-    
-    showLoading(true);
-    
-    try {
-        const response = await fetch(`${API_URL}/api/v1/appointments/auto-book`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            credentials: 'include',
-            body: JSON.stringify({ profile, specialty, auto_book: true })
-        });
-        
-        const data = await response.json();
-        
-        if (data.success) {
-            showNotification('✅ Wizyta automatycznie zarezerwowana!', 'success');
-        } else {
-            showNotification('Błąd auto-rezerwacji: ' + data.message, 'error');
-        }
-    } catch (error) {
-        console.error('❌ Błąd auto-rezerwacji:', error);
         showNotification('Błąd połączenia z serwerem', 'error');
     } finally {
         showLoading(false);
@@ -341,27 +391,26 @@ async function autoBookAppointment() {
 // =========================
 
 function showLoading(show) {
-    const loader = document.getElementById('loader');
+    const loader = document.getElementById('loadingModal');
     if (loader) {
         loader.style.display = show ? 'flex' : 'none';
     }
 }
 
 function showNotification(message, type = 'info') {
-    const notification = document.createElement('div');
-    notification.className = `notification notification-${type}`;
-    notification.textContent = message;
-    
-    document.body.appendChild(notification);
-    
-    setTimeout(() => {
-        notification.classList.add('show');
-    }, 10);
+    const toast = document.getElementById('toast');
+    if (!toast) return;
+
+    toast.textContent = message;
+    toast.className = `toast toast-${type} show`;
     
     setTimeout(() => {
-        notification.classList.remove('show');
-        setTimeout(() => notification.remove(), 300);
+        toast.classList.remove('show');
     }, 3000);
+}
+
+function openGitHub() {
+    window.open('https://github.com/AdamWojciechowskiPL/Medifinder', '_blank');
 }
 
 // =========================
