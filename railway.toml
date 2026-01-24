@@ -1,0 +1,20 @@
+[build]
+builder = "dockerfile"
+dockerfilePath = "backend/Dockerfile"
+context = "backend"
+
+[deploy]
+restartPolicyType = "on_failure"
+restartPolicyMaxRetries = 5
+
+[[services]]
+name = "medifinder-api"
+serviceType = "backend"
+domain = "medifinder-api"
+environment = "production"
+port = 5000
+
+# Skalowanie - darmowa warstwa Railway
+[deploy.resources]
+cpu = "shared-cpu"
+memory = "512MB"
