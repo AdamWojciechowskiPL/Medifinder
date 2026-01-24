@@ -4,11 +4,12 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>🏥 Medifinder Web</title>
-    <link rel="stylesheet" href="style.css">
+    <!-- Użycie ścieżki bezwzględnej (zaczynającej się od /) zapobiega błędom przy ładowaniu z podstron -->
+    <link rel="stylesheet" href="/style.css">
 </head>
 <body>
     <div class="container">
-        <!-- Header jak w desktop (tytuł) -->
+        <!-- Header -->
         <header class="header">
             <h1>Medicover Appointment Finder Web</h1>
             <div class="header-right">
@@ -28,7 +29,7 @@
         <!-- Main Content -->
         <div id="appContent" class="hidden">
             
-            <!-- Sekcja 1: Zarządzanie profilem i Auto-sprawdzanie -->
+            <!-- Sekcja 1: Zarządzanie profilem -->
             <div class="panel">
                 <div class="panel-row">
                     <label><strong>[+] Zarządzanie Profilem:</strong> <span id="currentProfileLabel">Brak</span></label>
@@ -57,7 +58,7 @@
                 <div class="panel-row" style="margin-top: 10px;">
                     <label>Dni tygodnia:</label>
                     <div class="weekdays-selector" id="weekdaysContainer">
-                        <!-- Generowane przez JS: Pn Wt Śr ... -->
+                        <!-- Generowane przez JS -->
                     </div>
                 </div>
                 <div class="panel-row">
@@ -67,7 +68,7 @@
                 </div>
             </div>
 
-            <!-- Sekcja 2: Kryteria wyszukiwania (Główna) -->
+            <!-- Sekcja 2: Kryteria wyszukiwania -->
             <div class="panel" style="border-top: 2px solid #ccc;">
                 <div class="panel-header">Kryteria wyszukiwania</div>
                 
@@ -91,9 +92,7 @@
                                 <div class="dropdown-search">
                                     <input type="text" placeholder="Szukaj..." onkeyup="filterDropdown(this, 'doctorsList')">
                                 </div>
-                                <div class="dropdown-list" id="doctorsList">
-                                    <!-- Generowane przez JS -->
-                                </div>
+                                <div class="dropdown-list" id="doctorsList"></div>
                                 <div class="dropdown-footer">
                                     <button class="btn btn-sm btn-link" onclick="clearSelection('doctorsList')">Wyczyść</button>
                                     <button class="btn btn-sm btn-primary" onclick="toggleDropdown('doctorsDropdown')">Zamknij</button>
@@ -113,9 +112,7 @@
                                 <div class="dropdown-search">
                                     <input type="text" placeholder="Szukaj..." onkeyup="filterDropdown(this, 'clinicsList')">
                                 </div>
-                                <div class="dropdown-list" id="clinicsList">
-                                    <!-- Generowane przez JS -->
-                                </div>
+                                <div class="dropdown-list" id="clinicsList"></div>
                                 <div class="dropdown-footer">
                                     <button class="btn btn-sm btn-link" onclick="clearSelection('clinicsList')">Wyczyść</button>
                                     <button class="btn btn-sm btn-primary" onclick="toggleDropdown('clinicsDropdown')">Zamknij</button>
@@ -162,9 +159,7 @@
                             <th>Placówka</th>
                         </tr>
                     </thead>
-                    <tbody id="resultsBody">
-                        <!-- Wyniki -->
-                    </tbody>
+                    <tbody id="resultsBody"></tbody>
                 </table>
             </div>
 
@@ -190,6 +185,7 @@
         </div>
     </div>
 
-    <script src="script.js"></script>
+    <!-- Użycie ścieżki bezwzględnej -->
+    <script src="/script.js"></script>
 </body>
 </html>
