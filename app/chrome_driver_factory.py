@@ -75,15 +75,17 @@ class ChromeDriverFactory:
         options = webdriver.ChromeOptions()
         user_agent = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
         
-        if self.headless:
-            # Użyj nowego, lepszego trybu headless
-            options.add_argument('--headless=new')
-            options.add_argument(f'user-agent={user_agent}')
-        
-        # Opcje stabilności
+        # W środowisku Dockerowym Railway/Heroku/etc. te flagi są często niezbędne
+        options.add_argument('--headless=new')
         options.add_argument('--no-sandbox')
         options.add_argument('--disable-dev-shm-usage')
         options.add_argument('--disable-gpu')
+        
+        if self.headless:
+            # Wymuś headless jeśli tak skonfigurowano, ale powyższe flagi już to załatwiają w wielu przypadkach
+            pass
+            
+        options.add_argument(f'user-agent={user_agent}')
         options.add_argument("--window-size=1920,1080")
         
         # Opcje antydetekcyjne
@@ -93,6 +95,11 @@ class ChromeDriverFactory:
         options.add_argument('--disable-notifications')
         options.add_argument("--lang=pl-PL")
         
+        # Jawne wskazanie binary location, jeśli jest ustawione w env (np. w Dockerfile)
+        chrome_bin = os.environ.get("CHROME_BIN")
+        if chrome_bin:
+            options.binary_location = chrome_bin
+
         options.add_experimental_option('excludeSwitches', ['enable-automation', 'enable-logging'])
         options.add_experimental_option('useAutomationExtension', False)
         
@@ -108,10 +115,30 @@ class ChromeDriverFactory:
     def _get_chrome_service(self) -> Service:
         """Zwraca obiekt Service, zarządzając instalacją sterownika."""
         try:
-            logger.info("Konfiguracja usługi ChromeDriver za pomocą WebDriverManager...")
-            # Wyłączenie weryfikacji SSL, co pomaga w niektórych sieciach firmowych
+            logger.info("Konfiguracja usługi ChromeDriver...")
+            
+            # W środowisku Dockerowym z zainstalowanym chromium-driver, ścieżka jest często stała
+            chromedriver_bin = os.environ.get("CHROMEDRIVER_BIN")
+            if chromedriver_bin and os.path.exists(chromedriver_bin):
+                logger.info(f"Używanie systemowego sterownika z: {chromedriver_bin}")
+                return Service(chromedriver_bin)
+
+            logger.info("Pobieranie sterownika przez WebDriverManager...")
+            # Wyłączenie weryfikacji SSL
             os.environ['WDM_SSL_VERIFY'] = '0'
-            driver_path = ChromeDriverManager().install()
+            
+            # Fix dla błędu 'NoneType' object has no attribute 'split' w get_latest_release_version
+            # Jawnie wskazujemy wersję lub używamy zainstalowanego Chrome do detekcji
+            try:
+                # Najpierw spróbuj standardowo
+                driver_path = ChromeDriverManager().install()
+            except AttributeError:
+                # Jeśli błąd split (nie wykryto wersji Chrome), spróbuj wymusić wersję "latest"
+                # lub po prostu użyć systemowego jeśli w ogóle jest
+                logger.warning("Nie udało się wykryć wersji Chrome automatycznie. Próba instalacji 'latest'...")
+                # To może być ryzykowne jeśli wersje się nie zgadzają, ale lepsze niż crash
+                driver_path = ChromeDriverManager(version="latest").install()
+
             return Service(driver_path)
         except Exception as e:
             logger.error(f"Nie udało się skonfigurować usługi ChromeDriver: {e}")
@@ -122,8 +149,12 @@ class ChromeDriverFactory:
         driver.implicitly_wait(10)
         driver.set_page_load_timeout(45)
         
+        # W headless maximize może nie działać lub nie mieć sensu, ale ustawiamy rozmiar w options
         if not self.headless:
-            driver.maximize_window()
+            try:
+                driver.maximize_window()
+            except:
+                pass
         
         # Dodatkowy skrypt maskujący, który usuwa flagę "webdriver" z przeglądarki
         driver.execute_script("Object.defineProperty(navigator, 'webdriver', {get: () => undefined})")
@@ -133,9 +164,14 @@ class ChromeDriverFactory:
         try:
             logger.info("Uruchamianie trybu awaryjnego z minimalną konfiguracją.")
             options = webdriver.ChromeOptions()
-            if self.headless:
-                options.add_argument('--headless=new')
+            options.add_argument('--headless=new') # Wymuś headless w fallback
             options.add_argument('--no-sandbox')
+            options.add_argument('--disable-dev-shm-usage')
+            
+            # Również tutaj binary location
+            chrome_bin = os.environ.get("CHROME_BIN")
+            if chrome_bin:
+                options.binary_location = chrome_bin
             
             service = self._get_chrome_service()
             driver = webdriver.Chrome(service=service, options=options)
