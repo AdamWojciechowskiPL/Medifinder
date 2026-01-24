@@ -5,7 +5,7 @@ interfejsu graficznego (GUI).
 
 import logging
 import sys
-from typing import Optional, List, Dict, Any
+from typing import Optional, List, Dict, Any, Union
 from pathlib import Path
 from datetime import date, datetime
 # Zredukowane, niezbędne importy
@@ -137,16 +137,6 @@ class MedicoverApp:
                           excluded_dates: Optional[List[date]]) -> bool:
         """
         Sprawdza, czy wizyta spełnia kryteria filtrowania czasowego.
-        
-        Args:
-            appointment_datetime: Data i godzina wizyty
-            preferred_days: Lista numerów dni tygodnia (1-7, Pn-Nd)
-            time_range: Globalny zakres godzin {'start': 'HH:MM', 'end': 'HH:MM'}
-            day_time_ranges: Zakresy godzin per dzień {'1': {'start': 'HH:MM', 'end': 'HH:MM'}, ...}
-            excluded_dates: Lista wykluczonych dat
-        
-        Returns:
-            True jeśli wizyta spełnia wszystkie kryteria, False w przeciwnym razie
         """
         if not appointment_datetime:
             self.logger.debug("appointment_datetime jest None")
@@ -197,27 +187,18 @@ class MedicoverApp:
                            specialty: str = '',
                            doctors: Optional[List[str]] = None,
                            clinics: Optional[List[str]] = None,
+                           # NEW PARAMS
+                           specialty_ids: Optional[Union[int, List[int]]] = None,
+                           doctor_ids: Optional[List[int]] = None,
+                           clinic_ids: Optional[List[int]] = None,
+                           
                            preferred_days: Optional[List[int]] = None,
                            time_range: Optional[Dict[str, str]] = None,
                            day_time_ranges: Optional[Dict[str, Dict[str, str]]] = None,
                            excluded_dates: Optional[List[date]] = None,
                            headless: bool = False) -> List[Dict[str, Any]]:
         """
-        Wyszukuje wizyty ze wsparciem dla rozszerzonych filtrów czasowych.
-        
-        Args:
-            profile: Nazwa profilu
-            specialty: Specjalizacja
-            doctors: Lista lekarzy
-            clinics: Lista placówek
-            preferred_days: Lista preferowanych dni tygodnia (1-7)
-            time_range: Globalny zakres godzin {'start': 'HH:MM', 'end': 'HH:MM'}
-            day_time_ranges: Zakresy godzin per dzień {'1': {'start': '08:00', 'end': '12:00'}, ...}
-            excluded_dates: Lista wykluczonych dat
-            headless: Tryb headless dla przeglądarki
-        
-        Returns:
-            Lista wyszukanych wizyt
+        Wyszukuje wizyty ze wsparciem dla rozszerzonych filtrów czasowych i IDs.
         """
         # Jeśli trzeba przełączyć profil
         if profile != self.current_profile:
@@ -230,18 +211,31 @@ class MedicoverApp:
             return []
         
         # Logowanie parametrów
-        self.logger.info(f"Wyszukiwanie wizyt - specialty: {specialty}")
-        self.logger.info(f"  preferred_days: {preferred_days}")
-        self.logger.info(f"  time_range: {time_range}")
-        self.logger.info(f"  day_time_ranges: {day_time_ranges}")
-        self.logger.info(f"  excluded_dates: {excluded_dates}")
+        self.logger.info(f"Wyszukiwanie wizyt - specialty: {specialty} / IDs: {specialty_ids}")
+        self.logger.info(f"  doctors: {doctors} / IDs: {doctor_ids}")
         
         # Przygotowanie parametrów dla API
-        search_params = {
-            'specialty': specialty,
-            'doctors': doctors or [],
-            'clinics': clinics or []
-        }
+        # Preferuj ID jeśli podano
+        search_params = {}
+        
+        if specialty_ids:
+             # Upewnij się że to lista
+            if isinstance(specialty_ids, int):
+                search_params['SpecialtyIds'] = [specialty_ids]
+            elif isinstance(specialty_ids, list):
+                search_params['SpecialtyIds'] = specialty_ids
+        elif specialty:
+             search_params['specialty'] = specialty
+
+        if doctor_ids:
+            search_params['DoctorIds'] = doctor_ids
+        elif doctors:
+            search_params['doctors'] = doctors
+            
+        if clinic_ids:
+            search_params['ClinicIds'] = clinic_ids
+        elif clinics:
+            search_params['clinics'] = clinics
         
         # Wyszukaj wizyty z API
         try:
@@ -301,9 +295,14 @@ class MedicoverApp:
 
     def auto_book_appointment(self,
                              profile: str,
-                             specialty: str,
+                             specialty: str = '',
                              doctors: Optional[List[str]] = None,
                              clinics: Optional[List[str]] = None,
+                             # NEW PARAMS
+                             specialty_ids: Optional[Union[int, List[int]]] = None,
+                             doctor_ids: Optional[List[int]] = None,
+                             clinic_ids: Optional[List[int]] = None,
+
                              preferred_days: Optional[List[int]] = None,
                              time_range: Optional[Dict[str, str]] = None,
                              day_time_ranges: Optional[Dict[str, Dict[str, str]]] = None,
@@ -312,12 +311,6 @@ class MedicoverApp:
                              headless: bool = False) -> Dict[str, Any]:
         """
         Wyszukuje i automatycznie rezerwuje pierwszą wolną wizytę spełniającą kryteria.
-        
-        Args:
-            Takie same jak search_appointments + auto_book
-        
-        Returns:
-            Słownik ze statusem rezerwacji
         """
         self.logger.info("🤖 Uruchamianie automatycznej rezerwacji...")
         
@@ -327,6 +320,9 @@ class MedicoverApp:
             specialty=specialty,
             doctors=doctors,
             clinics=clinics,
+            specialty_ids=specialty_ids,
+            doctor_ids=doctor_ids,
+            clinic_ids=clinic_ids,
             preferred_days=preferred_days,
             time_range=time_range,
             day_time_ranges=day_time_ranges,
