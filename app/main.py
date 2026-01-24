@@ -9,10 +9,10 @@ from typing import Optional, List, Dict, Any
 from pathlib import Path
 from datetime import date, datetime
 # Zredukowane, niezbędne importy
-from config import Config
-from profile_manager import ProfileManager
-from medicover_client import MedicoverClient
-from data_manager import SpecialtyManager, DoctorManager, ClinicManager
+from .config import Config
+from .profile_manager import ProfileManager
+from .medicover_client import MedicoverClient
+from .data_manager import SpecialtyManager, DoctorManager, ClinicManager
 
 class MedicoverApp:
     """
@@ -392,7 +392,7 @@ class MedicoverApp:
         """Tworzy i uruchamia interfejs graficzny."""
         print("🚀 Uruchamianie interfejsu graficznego...")
         # Przekazujemy 'self' (czyli całą instancję app) oraz ścieżkę do konfiguracji
-        from gui import MedicoverGUI
+        from .gui import MedicoverGUI
         gui = MedicoverGUI(self, self.config_dir)
         gui.run()
 
@@ -401,7 +401,7 @@ def main():
     try:
         app = MedicoverApp()
 
-        from gui import MedicoverGUI
+        from .gui import MedicoverGUI
         print("🚀 Uruchamianie interfejsu graficznego...")
         gui = MedicoverGUI(app)
         gui.run()
