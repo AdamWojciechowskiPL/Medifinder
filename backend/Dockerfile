@@ -1,12 +1,10 @@
 FROM python:3.11-slim
 
-# Ustawienie zmiennych środowiskowych
 ENV PYTHONUNBUFFERED=1 \
     PYTHONDONTWRITEBYTECODE=1 \
     CHROME_BIN=/usr/bin/chromium \
     CHROMEDRIVER_BIN=/usr/bin/chromedriver
 
-# Zainstalowanie systemowych zależności (Chromium i ChromeDriver)
 RUN apt-get update && apt-get install -y --no-install-recommends \
     chromium \
     chromium-driver \
@@ -21,29 +19,25 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     && rm -rf /var/lib/apt/lists/* \
     && apt-get clean
 
-# Ustawienie katalogu roboczego
-WORKDIR /app
+# KLUCZOWA ZMIANA: Railway buduje z root-a repo, więc kopiujemy z backend/
+WORKDIR /app/backend
 
-# Kopiowanie pliku requirements
-COPY requirements.txt .
+# Kopiujemy requirements Z PODKATALOGU backend (kontekst Railway = root repo)
+COPY backend/requirements.txt .
 
-# Instalacja zależności Pythona
 RUN pip install --no-cache-dir --upgrade pip setuptools wheel && \
     pip install --no-cache-dir -r requirements.txt
 
-# Kopiowanie całej aplikacji
-COPY . .
+# Kopiujemy CAŁY backend do /app/backend
+COPY backend/ .
 
-# Stworzenie katalogów dla konfiguracji
-RUN mkdir -p /app/config /app/app
+# Tworzymy katalogi na config
+RUN mkdir -p /app/backend/config /app/backend/app
 
-# Port, na którym będzie działać aplikacja
 EXPOSE 5000
 
-# Health check
 HEALTHCHECK --interval=30s --timeout=10s --start-period=10s --retries=3 \
     CMD curl -f http://localhost:5000/health || exit 1
 
-# Uruchomienie aplikacji
-# Najpierw staramy się z gunicorn (jeśli zainstalowany), jeśli nie - używamy python -m flask
-CMD gunicorn --bind 0.0.0.0:5000 --workers 2 --timeout 120 --access-logfile - --error-logfile - main:app || python -m flask run --host 0.0.0.0 --port 5000
+# Startujemy gunicorn - main.py jest teraz w /app/backend
+CMD ["gunicorn", "--bind", "0.0.0.0:5000", "--workers", "2", "--timeout", "120", "--access-logfile", "-", "--error-logfile", "-", "main:app"]
