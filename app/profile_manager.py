@@ -174,9 +174,17 @@ class ProfileManager:
             for p in self._profiles:
                 p.default = False
         
+        # FIX: The "username" here is actually the login/card number.
+        # But the frontend calls add_profile with name, login, pass.
+        # The backend endpoint calls add_profile(login, pass, name).
+        # So 'username' param receives 'login' (4387717), and 'description' receives 'name' (Aniela).
+        
         profile = UserProfile(
-            username=username, password=encrypted_password, description=description,
-            is_child_account=is_child_account, default=set_as_default or not self._profiles,
+            username=username, # This is the LOGIN (card number)
+            password=encrypted_password, 
+            description=description, # This is the NAME (e.g. Aniela)
+            is_child_account=is_child_account, 
+            default=set_as_default or not self._profiles,
             created=datetime.now().isoformat()
         )
         self._profiles.append(profile)
@@ -196,7 +204,9 @@ class ProfileManager:
         return self.save_profiles()
 
     def get_profile(self, username: str) -> Optional[UserProfile]:
-        return next((p for p in self._profiles if p.username == username), None)
+        # Search by username (login) OR description (name)
+        # This fixes the issue where frontend sends 'Aniela' but backend stores '4387717' as username
+        return next((p for p in self._profiles if p.username == username or p.description == username), None)
 
     def get_all_profiles(self) -> List[UserProfile]:
         return self._profiles.copy()
@@ -223,7 +233,7 @@ class ProfileManager:
             decrypted_password = self._decrypt_password(profile.password)
             profile.last_used = datetime.now().isoformat()
             self.save_profiles() # Zapisz zaktualizowaną datę ostatniego użycia
-            return (username, decrypted_password)
+            return (profile.username, decrypted_password)
         except Exception as e:
             self.logger.error(f"Nie udało się pobrać danych dla {username}: {e}")
             return None
