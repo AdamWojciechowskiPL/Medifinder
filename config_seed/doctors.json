@@ -1,1 +1,882 @@
-{"type":"file","size":20005,"name":"doctors.json","path":"config_seed/doctors.json","sha":"f289a8b87127ff179f707e8f86d87a92a0f4adad","url":"https://api.github.com/repos/AdamWojciechowskiPL/Medifinder/contents/config/doctors.json?ref=5229188ff7e8f2b686e27afd6c08625e370c83b5","git_url":"https://api.github.com/repos/AdamWojciechowskiPL/Medifinder/git/blobs/f289a8b87127ff179f707e8f86d87a92a0f4adad","html_url":"https://github.com/AdamWojciechowskiPL/Medifinder/blob/5229188ff7e8f2b686e27afd6c08625e370c83b5/config/doctors.json","download_url":"https://raw.githubusercontent.com/AdamWojciechowskiPL/Medifinder/5229188ff7e8f2b686e27afd6c08625e370c83b5/config/doctors.json"}
+{
+    "Nowicki Dariusz": {
+        "id": "623516",
+        "specialty_ids": [
+            "9"
+        ]
+    },
+    "Gapińska Katarzyna": {
+        "id": "386868",
+        "specialty_ids": [
+            "9"
+        ]
+    },
+    "Tryka Bogumiła": {
+        "id": "378386",
+        "specialty_ids": [
+            "9",
+            "19046"
+        ]
+    },
+    "Chikha Masoud": {
+        "id": "586662",
+        "specialty_ids": [
+            "9"
+        ]
+    },
+    "Bogacka Elżbieta": {
+        "id": "230068",
+        "specialty_ids": [
+            "9"
+        ]
+    },
+    "Komór Jolanta": {
+        "id": "329862",
+        "specialty_ids": [
+            "163"
+        ]
+    },
+    "Wojciechowska Sylwia": {
+        "id": "10188",
+        "specialty_ids": [
+            "9"
+        ]
+    },
+    "Moskal Wojciech": {
+        "id": "472202",
+        "specialty_ids": [
+            "9"
+        ]
+    },
+    "Duda Beata": {
+        "id": "101682",
+        "specialty_ids": [
+            "9"
+        ]
+    },
+    "Abu-Shawareb Ghassan Abdh Ali": {
+        "id": "138374",
+        "specialty_ids": [
+            "9"
+        ]
+    },
+    "Miklas Jan": {
+        "id": "482970",
+        "specialty_ids": [
+            "9"
+        ]
+    },
+    "Lhosar Yeshi Sangpo": {
+        "id": "312414",
+        "specialty_ids": [
+            "9"
+        ]
+    },
+    "Virk Ayyaz": {
+        "id": "400228",
+        "specialty_ids": [
+            "9"
+        ]
+    },
+    "Lewandowski Wojciech": {
+        "id": "335056",
+        "specialty_ids": [
+            "9"
+        ]
+    },
+    "Mierzejewski Michał": {
+        "id": "377852",
+        "specialty_ids": [
+            "9"
+        ]
+    },
+    "Gackowski Sebastian": {
+        "id": "337706",
+        "specialty_ids": [
+            "163"
+        ]
+    },
+    "Guranowski Tomasz": {
+        "id": "12554",
+        "specialty_ids": [
+            "9",
+            "19046"
+        ]
+    },
+    "Śliwińska-Wasilewska Anna": {
+        "id": "6850",
+        "specialty_ids": [
+            "9",
+            "19046"
+        ]
+    },
+    "Zachara Jakub": {
+        "id": "454752",
+        "specialty_ids": [
+            "163"
+        ]
+    },
+    "Prościński Marek": {
+        "id": "179686",
+        "specialty_ids": [
+            "163"
+        ]
+    },
+    "Mustafa Ahmad": {
+        "id": "412498",
+        "specialty_ids": [
+            "163"
+        ]
+    },
+    "Tyszka Janusz": {
+        "id": "1136",
+        "specialty_ids": [
+            "202",
+            "163"
+        ]
+    },
+    "Kozyra Katarzyna": {
+        "id": "495382",
+        "specialty_ids": [
+            "163"
+        ]
+    },
+    "Krasicki Mariusz": {
+        "id": "175882",
+        "specialty_ids": [
+            "163"
+        ]
+    },
+    "Sarzyńska Sylwia": {
+        "id": "385440",
+        "specialty_ids": [
+            "163"
+        ]
+    },
+    "Kula Katarzyna": {
+        "id": "317454",
+        "specialty_ids": [
+            "163"
+        ]
+    },
+    "Strzałkowska Agnieszka": {
+        "id": "227268",
+        "specialty_ids": [
+            "9"
+        ]
+    },
+    "Warda Łukasz": {
+        "id": "342664",
+        "specialty_ids": [
+            "9",
+            "19046"
+        ]
+    },
+    "Ciok Janusz": {
+        "id": "475192",
+        "specialty_ids": [
+            "9",
+            "19046"
+        ]
+    },
+    "Chudzicka Aleksandra": {
+        "id": "276696",
+        "specialty_ids": [
+            "9"
+        ]
+    },
+    "Ciepielowska Ewa": {
+        "id": "808",
+        "specialty_ids": [
+            "9"
+        ]
+    },
+    "Szymański Aleksander": {
+        "id": "618858",
+        "specialty_ids": [
+            "9"
+        ]
+    },
+    "Kolb Siarhei": {
+        "id": "591458",
+        "specialty_ids": [
+            "163"
+        ]
+    },
+    "Błaszczyk Krzysztof": {
+        "id": "406130",
+        "specialty_ids": [
+            "163"
+        ]
+    },
+    "Łazarski Adam": {
+        "id": "487012",
+        "specialty_ids": [
+            "163"
+        ]
+    },
+    "Jarecka-Szmajdzińska Katarzyna": {
+        "id": "2102",
+        "specialty_ids": [
+            "9"
+        ]
+    },
+    "Gąsior Robert": {
+        "id": "147150",
+        "specialty_ids": [
+            "9"
+        ]
+    },
+    "Buczyńska-Barbachowska Aleksandra": {
+        "id": "393",
+        "specialty_ids": [
+            "9"
+        ]
+    },
+    "Koźluk Jolanta": {
+        "id": "18162",
+        "specialty_ids": [
+            "9"
+        ]
+    },
+    "Rogulska Agnieszka": {
+        "id": "408890",
+        "specialty_ids": [
+            "9"
+        ]
+    },
+    "Kazimierska Katarzyna": {
+        "id": "411490",
+        "specialty_ids": [
+            "9"
+        ]
+    },
+    "Tomaszewska-Kryk Ewa": {
+        "id": "624086",
+        "specialty_ids": [
+            "9"
+        ]
+    },
+    "Żmijewski Andrzej": {
+        "id": "173230",
+        "specialty_ids": [
+            "9"
+        ]
+    },
+    "Koźbiał Małgorzata": {
+        "id": "5560",
+        "specialty_ids": [
+            "9",
+            "19046"
+        ]
+    },
+    "Długopolska Beata": {
+        "id": "446350",
+        "specialty_ids": [
+            "9"
+        ]
+    },
+    "Zdeb Anna": {
+        "id": "400310",
+        "specialty_ids": [
+            "9"
+        ]
+    },
+    "Graca Aleksandra": {
+        "id": "590866",
+        "specialty_ids": [
+            "9",
+            "19046"
+        ]
+    },
+    "Shvarsalon Nataliia": {
+        "id": "422806",
+        "specialty_ids": [
+            "9"
+        ]
+    },
+    "Wernik Tomasz": {
+        "id": "572826",
+        "specialty_ids": [
+            "9",
+            "19046"
+        ]
+    },
+    "Osowska Alina": {
+        "id": "5556",
+        "specialty_ids": [
+            "9"
+        ]
+    },
+    "Kovalchuk Yevhen": {
+        "id": "384616",
+        "specialty_ids": [
+            "9",
+            "19046"
+        ]
+    },
+    "Mazur Dariusz": {
+        "id": "103360",
+        "specialty_ids": [
+            "9"
+        ]
+    },
+    "Komorowski Piotr": {
+        "id": "6468",
+        "specialty_ids": [
+            "9",
+            "19046"
+        ]
+    },
+    "Opatczyk Paweł": {
+        "id": "221808",
+        "specialty_ids": [
+            "9",
+            "19046"
+        ]
+    },
+    "Zembrzuski Ryszard": {
+        "id": "4752",
+        "specialty_ids": [
+            "9",
+            "19046"
+        ]
+    },
+    "Tarczoń Magdalena": {
+        "id": "548014",
+        "specialty_ids": [
+            "9"
+        ]
+    },
+    "Olędzki Piotr": {
+        "id": "222808",
+        "specialty_ids": [
+            "9",
+            "19046"
+        ]
+    },
+    "Kwiatkowska-Stawiarczyk Marlena": {
+        "id": "373830",
+        "specialty_ids": [
+            "9"
+        ]
+    },
+    "Holewińska Iwona": {
+        "id": "413140",
+        "specialty_ids": [
+            "9"
+        ]
+    },
+    "Okaczuk Beata": {
+        "id": "373790",
+        "specialty_ids": [
+            "182"
+        ]
+    },
+    "Roman Artur": {
+        "id": "354082",
+        "specialty_ids": [
+            "9"
+        ]
+    },
+    "Wcześniak Agata": {
+        "id": "329482",
+        "specialty_ids": [
+            "9"
+        ]
+    },
+    "Kurek Michał": {
+        "id": "328438",
+        "specialty_ids": [
+            "9"
+        ]
+    },
+    "Gawrych Piotr": {
+        "id": "385",
+        "specialty_ids": [
+            "158",
+            "132"
+        ]
+    },
+    "Kroczek Sylwia": {
+        "id": "448960",
+        "specialty_ids": [
+            "158",
+            "132"
+        ]
+    },
+    "Wyczółkowska-Golba Julita": {
+        "id": "351300",
+        "specialty_ids": [
+            "158",
+            "132"
+        ]
+    },
+    "Przewoźna Joanna": {
+        "id": "306634",
+        "specialty_ids": [
+            "158",
+            "132"
+        ]
+    },
+    "Krasniuk Oleksandra": {
+        "id": "491978",
+        "specialty_ids": [
+            "158",
+            "132"
+        ]
+    },
+    "Łysenko-Pośnik Uljana": {
+        "id": "366868",
+        "specialty_ids": [
+            "158"
+        ]
+    },
+    "Zegadło Marcin": {
+        "id": "47",
+        "specialty_ids": [
+            "132"
+        ]
+    },
+    "Sykson Ewa": {
+        "id": "632",
+        "specialty_ids": [
+            "132",
+            "158"
+        ]
+    },
+    "Baczyńska Olga": {
+        "id": "591460",
+        "specialty_ids": [
+            "132"
+        ]
+    },
+    "Kaszewski Tomasz": {
+        "id": "387034",
+        "specialty_ids": [
+            "19046"
+        ]
+    },
+    "Wyszyńska-Kowalewska Małgorzata": {
+        "id": "172006",
+        "specialty_ids": [
+            "11682"
+        ]
+    },
+    "Punkt Pobrań 1 Warszawa Atrium": {
+        "id": "363106",
+        "specialty_ids": [
+            "52106"
+        ]
+    },
+    "Punkt Pobrań 4 Warszawa Prosta": {
+        "id": "363304",
+        "specialty_ids": [
+            "52106"
+        ]
+    },
+    "Punkt Pobrań 2 Warszawa Prosta": {
+        "id": "363300",
+        "specialty_ids": [
+            "52106"
+        ]
+    },
+    "Punkt Pobrań 1 Warszawa Prosta": {
+        "id": "363298",
+        "specialty_ids": [
+            "52106"
+        ]
+    },
+    "Punkt Pobrań 5 Warszawa Atrium": {
+        "id": "364770",
+        "specialty_ids": [
+            "52106"
+        ]
+    },
+    "Punkt Pobrań 2 Warszawa Atrium": {
+        "id": "363108",
+        "specialty_ids": [
+            "52106"
+        ]
+    },
+    "Punkt Pobrań 3 Warszawa Atrium": {
+        "id": "363110",
+        "specialty_ids": [
+            "52106"
+        ]
+    },
+    "Punkt Pobrań 2 Warszawa Aleje Jerozolimskie": {
+        "id": "363290",
+        "specialty_ids": [
+            "52106"
+        ]
+    },
+    "Punkt Pobrań 5 Warszawa Prosta": {
+        "id": "388400",
+        "specialty_ids": [
+            "52106"
+        ]
+    },
+    "Markiewicz Marcin": {
+        "id": "526004",
+        "specialty_ids": [
+            "27158"
+        ]
+    },
+    "Kozłowska Anna": {
+        "id": "1527",
+        "specialty_ids": [
+            "19046",
+            "9"
+        ]
+    },
+    "Mickiewicz-Lhosar Joanna": {
+        "id": "323446",
+        "specialty_ids": [
+            "19046"
+        ]
+    },
+    "Gałęza-Obrępalska Beata": {
+        "id": "417312",
+        "specialty_ids": [
+            "9"
+        ]
+    },
+    "Sikorska Justyna": {
+        "id": "601658",
+        "specialty_ids": [
+            "158"
+        ]
+    },
+    "Janiga Tomasz": {
+        "id": "491412",
+        "specialty_ids": [
+            "158"
+        ]
+    },
+    "Frączkiewicz-Skok Marietta": {
+        "id": "324882",
+        "specialty_ids": [
+            "11682"
+        ]
+    },
+    "Naderi Younes": {
+        "id": "82",
+        "specialty_ids": [
+            "11682"
+        ]
+    },
+    "Adamczyk Beata": {
+        "id": "533406",
+        "specialty_ids": [
+            "11682"
+        ]
+    },
+    "Mzyk Marzena": {
+        "id": "1822",
+        "specialty_ids": [
+            "11682"
+        ]
+    },
+    "Monkiewicz-Kołodziejczyk Hanna": {
+        "id": "130576",
+        "specialty_ids": [
+            "158"
+        ]
+    },
+    "Jastrzębowska Monika": {
+        "id": "137640",
+        "specialty_ids": [
+            "158"
+        ]
+    },
+    "Ostrowska Nelli": {
+        "id": "343868",
+        "specialty_ids": [
+            "158"
+        ]
+    },
+    "Domagała Dagmara": {
+        "id": "329874",
+        "specialty_ids": [
+            "158"
+        ]
+    },
+    "Strzałka Martyna": {
+        "id": "288366",
+        "specialty_ids": [
+            "158"
+        ]
+    },
+    "Ogińska Zdzisława": {
+        "id": "5456",
+        "specialty_ids": [
+            "158"
+        ]
+    },
+    "Sagała Magdalena": {
+        "id": "285484",
+        "specialty_ids": [
+            "158"
+        ]
+    },
+    "Stolarska-Kraszewska Lidia": {
+        "id": "394",
+        "specialty_ids": [
+            "158"
+        ]
+    },
+    "Lebelt-Pieniąca Katarzyna": {
+        "id": "426152",
+        "specialty_ids": [
+            "158"
+        ]
+    },
+    "Jarrah Sami": {
+        "id": "365446",
+        "specialty_ids": [
+            "158"
+        ]
+    },
+    "Kowalska Ewa": {
+        "id": "400226",
+        "specialty_ids": [
+            "158"
+        ]
+    },
+    "Wątrobińska Urszula": {
+        "id": "138494",
+        "specialty_ids": [
+            "158"
+        ]
+    },
+    "Gawron Grzegorz": {
+        "id": "408926",
+        "specialty_ids": [
+            "158"
+        ]
+    },
+    "Borowski Włodzimierz": {
+        "id": "103452",
+        "specialty_ids": [
+            "158"
+        ]
+    },
+    "Hoppe Robert": {
+        "id": "114716",
+        "specialty_ids": [
+            "158"
+        ]
+    },
+    "Rozwadowski Marcin": {
+        "id": "400230",
+        "specialty_ids": [
+            "158"
+        ]
+    },
+    "Pierzchlewicz Anna": {
+        "id": "148504",
+        "specialty_ids": [
+            "158"
+        ]
+    },
+    "Lossy-Stawujak Natalia": {
+        "id": "419116",
+        "specialty_ids": [
+            "158"
+        ]
+    },
+    "Lech Beata": {
+        "id": "380776",
+        "specialty_ids": [
+            "158"
+        ]
+    },
+    "Cepińska-Miąsek Aleksandra": {
+        "id": "466582",
+        "specialty_ids": [
+            "158"
+        ]
+    },
+    "Artemniak-Wojtowicz Dorota": {
+        "id": "619048",
+        "specialty_ids": [
+            "158"
+        ]
+    },
+    "Piotrowska Violetta": {
+        "id": "514598",
+        "specialty_ids": [
+            "158"
+        ]
+    },
+    "Szwolgin Olena": {
+        "id": "102710",
+        "specialty_ids": [
+            "11682"
+        ]
+    },
+    "Pietrzyk Dominika": {
+        "id": "525422",
+        "specialty_ids": [
+            "11682"
+        ]
+    },
+    "Fiuk-Gliwińska Małgorzata": {
+        "id": "407128",
+        "specialty_ids": [
+            "19046"
+        ]
+    },
+    "Maciejewska Katarzyna": {
+        "id": "103424",
+        "specialty_ids": [
+            "19046"
+        ]
+    },
+    "Mikołajczyk Zygmunt": {
+        "id": "107570",
+        "specialty_ids": [
+            "200"
+        ]
+    },
+    "Wajs Katarzyna": {
+        "id": "939",
+        "specialty_ids": [
+            "200",
+            "11682"
+        ]
+    },
+    "Stroynowska Jagoda": {
+        "id": "315820",
+        "specialty_ids": [
+            "1188"
+        ]
+    },
+    "Kułak Anna": {
+        "id": "344064",
+        "specialty_ids": [
+            "1188"
+        ]
+    },
+    "Łukiewicz Monika": {
+        "id": "276362",
+        "specialty_ids": [
+            "1188"
+        ]
+    },
+    "Siwicka Maria": {
+        "id": "294630",
+        "specialty_ids": [
+            "1188"
+        ]
+    },
+    "Majewska Natalia": {
+        "id": "480386",
+        "specialty_ids": [
+            "1188"
+        ]
+    },
+    "Niemas Krystyna": {
+        "id": "140870",
+        "specialty_ids": [
+            "200"
+        ]
+    },
+    "Sandzewicz Elżbieta": {
+        "id": "1614",
+        "specialty_ids": [
+            "19046"
+        ]
+    },
+    "Internista Telecentrum": {
+        "id": "398424",
+        "specialty_ids": [
+            "19046"
+        ]
+    },
+    "Internista 2 Telecentrum": {
+        "id": "439338",
+        "specialty_ids": [
+            "19046"
+        ]
+    },
+    "Internista 6 Telecentrum": {
+        "id": "487784",
+        "specialty_ids": [
+            "19046"
+        ]
+    },
+    "Internista 3 Telecentrum": {
+        "id": "487778",
+        "specialty_ids": [
+            "19046"
+        ]
+    },
+    "Internista 4 Telecentrum": {
+        "id": "487780",
+        "specialty_ids": [
+            "19046"
+        ]
+    },
+    "Liasota Yana": {
+        "id": "541220",
+        "specialty_ids": [
+            "3"
+        ]
+    },
+    "Małkiewicz Katarzyna": {
+        "id": "502604",
+        "specialty_ids": [
+            "3"
+        ]
+    },
+    "Wardak Joanna": {
+        "id": "304174",
+        "specialty_ids": [
+            "11682"
+        ]
+    },
+    "Samul Aneta": {
+        "id": "224234",
+        "specialty_ids": [
+            "11682"
+        ]
+    },
+    "Skorupka Jędrzej": {
+        "id": "477776",
+        "specialty_ids": [
+            "30"
+        ]
+    },
+    "Albanna Ihab": {
+        "id": "622060",
+        "specialty_ids": [
+            "30"
+        ]
+    },
+    "Judycki Jacek": {
+        "id": "195198",
+        "specialty_ids": [
+            "30"
+        ]
+    },
+    "Wnętrzak Iwona": {
+        "id": "414656",
+        "specialty_ids": [
+            "30"
+        ]
+    },
+    "Podlaszewski Jakub": {
+        "id": "506994",
+        "specialty_ids": [
+            "62742"
+        ]
+    },
+    "Mroczkowska Natalia": {
+        "id": "513792",
+        "specialty_ids": [
+            "62742"
+        ]
+    }
+}
