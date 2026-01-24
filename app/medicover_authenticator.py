@@ -10,8 +10,8 @@ from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
 from selenium.common.exceptions import TimeoutException, WebDriverException
 
-from chrome_driver_factory import ChromeDriverFactory
-from login_form_handler import LoginFormHandler
+from .chrome_driver_factory import ChromeDriverFactory
+from .login_form_handler import LoginFormHandler
 
 logger = logging.getLogger(__name__)
 

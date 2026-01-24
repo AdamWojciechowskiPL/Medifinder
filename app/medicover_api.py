@@ -9,7 +9,7 @@ import logging
 from typing import Dict, List, Any, Optional
 from datetime import datetime
 
-from error_handler import (
+from .error_handler import (
     handle_api_errors, 
     log_api_call, 
     validate_bearer_token,

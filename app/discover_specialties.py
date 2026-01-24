@@ -6,9 +6,9 @@ import logging
 from typing import Dict, Set
 
 # Importujemy komponenty z działającej aplikacji
-from medicover_client import MedicoverClient
-from config import Config
-from profile_manager import ProfileManager
+from .medicover_client import MedicoverClient
+from .config import Config
+from .profile_manager import ProfileManager
 
 # --- Konfiguracja ---
 ID_RANGE_START = 727

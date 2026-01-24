@@ -7,10 +7,10 @@ import logging
 from typing import Dict, List, Any, Optional
 from datetime import datetime, timedelta
 
-from medicover_api import MedicoverAPI
-from medicover_authenticator import MedicoverAuthenticator
-from appointment_formatter import AppointmentFormatter
-from error_handler import AuthenticationException, RateLimitException
+from .medicover_api import MedicoverAPI
+from .medicover_authenticator import MedicoverAuthenticator
+from .appointment_formatter import AppointmentFormatter
+from .error_handler import AuthenticationException, RateLimitException
 
 logger = logging.getLogger(__name__)
 

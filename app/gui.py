@@ -8,19 +8,19 @@ from tkinter import ttk, messagebox, scrolledtext, simpledialog
 import logging
 from typing import Dict, List, Any, Optional
 from datetime import datetime, timedelta, date
-from custom_widgets import ChecklistCombobox
+from .custom_widgets import ChecklistCombobox
 import threading
 import sys
 import os
 import json
 import time
-from profile_manager import ProfileManager
-from error_handler import APIRetryExhaustedError
+from .profile_manager import ProfileManager
+from .error_handler import APIRetryExhaustedError
 from pathlib import Path
 import queue
 
 logger = logging.getLogger(__name__)
-from medicover_client import LoginRequiredException
+from .medicover_client import LoginRequiredException
 
 
 class GuiLogHandler(logging.Handler):
