@@ -35,6 +35,11 @@ def seed_config_files():
     Sprawdza, czy w katalogu CONFIG_DIR (volume) brakuje plików json.
     Jeśli tak, kopiuje je z katalogu SEED_DIR (obraz dockera).
     """
+    logger.info(f"🚀 ROZPOCZYNAM SEEDOWANIE KONFIGURACJI")
+    logger.info(f"📂 ROOT_DIR: {ROOT_DIR}")
+    logger.info(f"📂 CONFIG_DIR: {CONFIG_DIR} (exists: {CONFIG_DIR.exists()})")
+    logger.info(f"📂 SEED_DIR: {SEED_DIR} (exists: {SEED_DIR.exists()})")
+
     if not CONFIG_DIR.exists():
         CONFIG_DIR.mkdir(parents=True, exist_ok=True)
         logger.info(f"Utworzono katalog konfiguracyjny: {CONFIG_DIR}")
@@ -47,26 +52,28 @@ def seed_config_files():
             dst = CONFIG_DIR / filename
             
             should_copy = False
+            reason = ""
             
             if src.exists():
                 if not dst.exists():
                     should_copy = True
-                    logger.info(f"📄 Plik {filename} nie istnieje w volume. Kopiowanie...")
+                    reason = "Brak pliku docelowego"
                 else:
-                    # Sprawdź czy plik jest pusty (lub prawie pusty, np. "{}")
                     try:
-                        size = dst.stat().st_size
-                        # Jeśli plik jest mniejszy niż 10 bajtów, zakładamy że jest pusty/uszkodzony
-                        # i nadpisujemy go danymi z seeda (chyba że to profiles.json, tu ostrożnie)
-                        if size < 10 and filename != "profiles.json":
-                            should_copy = True
-                            logger.warning(f"⚠️ Plik {filename} w volume jest pusty ({size}B). Nadpisywanie z seeda.")
+                        src_size = src.stat().st_size
+                        dst_size = dst.stat().st_size
                         
-                        # Dla specialties.json zawsze wymuszamy nadpisanie jeśli jest mniejszy niż seed (np. pusty vs pełny)
-                        # bo to słownik statyczny
-                        if filename == "specialties.json" and size < src.stat().st_size:
+                        logger.info(f"🔍 {filename}: SRC={src_size}B, DST={dst_size}B")
+
+                        # Jeśli plik jest mniejszy niż 10 bajtów (pusty/uszkodzony)
+                        if dst_size < 10 and filename != "profiles.json":
+                            should_copy = True
+                            reason = f"Plik docelowy zbyt mały ({dst_size}B)"
+                        
+                        # Dla specialties.json zawsze wymuszamy nadpisanie jeśli jest mniejszy niż seed
+                        elif filename == "specialties.json" and dst_size < src_size:
                              should_copy = True
-                             logger.warning(f"⚠️ Słownik {filename} wygląda na niekompletny. Aktualizacja z seeda.")
+                             reason = f"Słownik niekompletny ({dst_size}B < {src_size}B)"
                              
                     except Exception as e:
                         logger.error(f"Błąd sprawdzania pliku {dst}: {e}")
@@ -74,9 +81,11 @@ def seed_config_files():
                 if should_copy:
                     try:
                         shutil.copy2(src, dst)
-                        logger.info(f"✅ Skopiowano {filename} z seed do volume.")
+                        logger.info(f"✅ Skopiowano {filename}: {reason}")
                     except Exception as e:
                         logger.error(f"❌ Błąd kopiowania {filename}: {e}")
+                else:
+                    logger.info(f"⏭️ Pominięto {filename}: Plik wygląda OK")
             elif not src.exists() and filename != "profiles.json":
                 logger.warning(f"⚠️ Brak pliku źródłowego {filename} w {SEED_DIR}")
     else:
@@ -135,6 +144,40 @@ def get_current_user_email():
 @app.route('/health', methods=['GET'])
 def health_check():
     return jsonify({'status': 'ok', 'service': 'Medifinder API', 'version': '1.3.2'}), 200
+
+# Endpoint diagnostyczny
+@app.route('/api/v1/debug/config', methods=['GET'])
+def debug_config():
+    """Sprawdza stan plików konfiguracyjnych."""
+    status = {
+        "config_dir": str(CONFIG_DIR),
+        "seed_dir": str(SEED_DIR),
+        "files": {}
+    }
+    
+    for fname in ["specialties.json", "doctors.json", "clinics.json"]:
+        fpath = CONFIG_DIR / fname
+        fseed = SEED_DIR / fname
+        
+        file_info = {
+            "exists": fpath.exists(),
+            "size": fpath.stat().st_size if fpath.exists() else -1,
+            "seed_exists": fseed.exists(),
+            "seed_size": fseed.stat().st_size if fseed.exists() else -1,
+        }
+        
+        # Próba odczytu zawartości (skrócona)
+        if fpath.exists():
+            try:
+                with open(fpath, 'r', encoding='utf-8') as f:
+                    content = f.read(100) # pierwsze 100 znaków
+                    file_info["head"] = content
+            except Exception as e:
+                file_info["error"] = str(e)
+                
+        status["files"][fname] = file_info
+        
+    return jsonify(status)
 
 def require_login(fn):
     from functools import wraps
