@@ -7,6 +7,7 @@ import logging
 import sys
 from typing import Optional, List, Dict, Any
 from pathlib import Path
+from datetime import date, datetime
 # Zredukowane, niezbędne importy
 from config import Config
 from profile_manager import ProfileManager
@@ -118,31 +119,283 @@ class MedicoverApp:
         """Zwraca nazwę aktualnie aktywnego profilu."""
         return self.current_profile
 
-    def search_appointments(self, search_params: Optional[Dict] = None) -> List[Dict[str, Any]]:
-        """Publiczna metoda do wyszukiwania wizyt. Deleguje zadanie do klienta."""
+    def add_profile(self, login: str, password: str, name: str) -> Dict[str, Any]:
+        """Dodaje nowy profil do aplikacji."""
+        try:
+            result = self.profile_manager.add_profile(login, password, name)
+            self.logger.info(f"Profil '{name}' dodany pomyślnie")
+            return result
+        except Exception as e:
+            self.logger.error(f"Błąd dodawania profilu: {e}")
+            raise
+
+    def _fits_time_filters(self, 
+                          appointment_datetime: datetime,
+                          preferred_days: List[int],
+                          time_range: Optional[Dict[str, str]],
+                          day_time_ranges: Optional[Dict[str, Dict[str, str]]],
+                          excluded_dates: Optional[List[date]]) -> bool:
+        """
+        Sprawdza, czy wizyta spełnia kryteria filtrowania czasowego.
+        
+        Args:
+            appointment_datetime: Data i godzina wizyty
+            preferred_days: Lista numerów dni tygodnia (1-7, Pn-Nd)
+            time_range: Globalny zakres godzin {'start': 'HH:MM', 'end': 'HH:MM'}
+            day_time_ranges: Zakresy godzin per dzień {'1': {'start': 'HH:MM', 'end': 'HH:MM'}, ...}
+            excluded_dates: Lista wykluczonych dat
+        
+        Returns:
+            True jeśli wizyta spełnia wszystkie kryteria, False w przeciwnym razie
+        """
+        if not appointment_datetime:
+            self.logger.debug("appointment_datetime jest None")
+            return False
+        
+        apt_date = appointment_datetime.date() if isinstance(appointment_datetime, datetime) else appointment_datetime
+        apt_time = appointment_datetime.time() if isinstance(appointment_datetime, datetime) else None
+        apt_weekday = apt_date.isoweekday()  # 1=Pn, 7=Nd
+        
+        # 1. Sprawdzenie wykluczonych dat
+        if excluded_dates and apt_date in excluded_dates:
+            self.logger.debug(f"Wizyta {apt_date} {apt_time} jest na liście wykluczonych dat")
+            return False
+        
+        # 2. Sprawdzenie dnia tygodnia
+        if preferred_days and apt_weekday not in preferred_days:
+            self.logger.debug(f"Wizyta w dzień {apt_weekday} nie jest w preferred_days: {preferred_days}")
+            return False
+        
+        # 3. Sprawdzenie zakresu godzin
+        if apt_time:
+            # Jeśli są zakresy per dzień, użyj ich; inaczej użyj globalnego zakresu
+            if day_time_ranges and str(apt_weekday) in day_time_ranges:
+                day_range = day_time_ranges[str(apt_weekday)]
+                time_from = day_range.get('start', '00:00')
+                time_to = day_range.get('end', '23:59')
+            elif time_range:
+                time_from = time_range.get('start', '00:00')
+                time_to = time_range.get('end', '23:59')
+            else:
+                # Brak ograniczeń czasowych
+                return True
+            
+            # Konwersja do porównywalnego formatu
+            try:
+                apt_time_str = apt_time.strftime('%H:%M') if hasattr(apt_time, 'strftime') else str(apt_time)[:5]
+                if apt_time_str < time_from or apt_time_str > time_to:
+                    self.logger.debug(f"Wizyta o {apt_time_str} nie mieści się w zakresie {time_from}-{time_to}")
+                    return False
+            except (ValueError, AttributeError) as e:
+                self.logger.warning(f"Błąd porównania godzin: {e}")
+                return False
+        
+        return True
+
+    def search_appointments(self, 
+                           profile: str,
+                           specialty: str = '',
+                           doctors: Optional[List[str]] = None,
+                           clinics: Optional[List[str]] = None,
+                           preferred_days: Optional[List[int]] = None,
+                           time_range: Optional[Dict[str, str]] = None,
+                           day_time_ranges: Optional[Dict[str, Dict[str, str]]] = None,
+                           excluded_dates: Optional[List[date]] = None,
+                           headless: bool = False) -> List[Dict[str, Any]]:
+        """
+        Wyszukuje wizyty ze wsparciem dla rozszerzonych filtrów czasowych.
+        
+        Args:
+            profile: Nazwa profilu
+            specialty: Specjalizacja
+            doctors: Lista lekarzy
+            clinics: Lista placówek
+            preferred_days: Lista preferowanych dni tygodnia (1-7)
+            time_range: Globalny zakres godzin {'start': 'HH:MM', 'end': 'HH:MM'}
+            day_time_ranges: Zakresy godzin per dzień {'1': {'start': '08:00', 'end': '12:00'}, ...}
+            excluded_dates: Lista wykluczonych dat
+            headless: Tryb headless dla przeglądarki
+        
+        Returns:
+            Lista wyszukanych wizyt
+        """
+        # Jeśli trzeba przełączyć profil
+        if profile != self.current_profile:
+            if not self.switch_profile(profile):
+                self.logger.error(f"Nie udało się przełączyć na profil '{profile}'")
+                return []
+        
         if not self.client:
             self.logger.error("Wyszukiwanie niemożliwe: klient nie jest zainicjalizowany.")
             return []
         
-        found_appointments = self.client.search_appointments(search_params)
+        # Logowanie parametrów
+        self.logger.info(f"Wyszukiwanie wizyt - specialty: {specialty}")
+        self.logger.info(f"  preferred_days: {preferred_days}")
+        self.logger.info(f"  time_range: {time_range}")
+        self.logger.info(f"  day_time_ranges: {day_time_ranges}")
+        self.logger.info(f"  excluded_dates: {excluded_dates}")
         
-        if found_appointments:
-            self._update_data_from_appointments(found_appointments)
+        # Przygotowanie parametrów dla API
+        search_params = {
+            'specialty': specialty,
+            'doctors': doctors or [],
+            'clinics': clinics or []
+        }
+        
+        # Wyszukaj wizyty z API
+        try:
+            found_appointments = self.client.search_appointments(search_params)
+        except Exception as e:
+            self.logger.error(f"Błąd wyszukiwania z API: {e}")
+            return []
+        
+        if not found_appointments:
+            self.logger.info("API zwróciło pustą listę wizyt")
+            return []
+        
+        self.logger.info(f"API zwróciło {len(found_appointments)} wizyt, stosowanie filtrów...")
+        
+        # Filtrowanie wyników na podstawie kryteriów czasowych
+        filtered_appointments = []
+        for apt in found_appointments:
+            try:
+                # Próbuj znaleźć datetime w wizycie
+                apt_datetime = None
+                if 'datetime' in apt:
+                    apt_dt_str = apt['datetime']
+                    apt_datetime = datetime.fromisoformat(apt_dt_str) if isinstance(apt_dt_str, str) else apt_dt_str
+                elif 'visitDate' in apt and 'visitTime' in apt:
+                    try:
+                        date_part = datetime.fromisoformat(apt['visitDate']).date()
+                        time_part = datetime.strptime(apt['visitTime'], '%H:%M').time()
+                        apt_datetime = datetime.combine(date_part, time_part)
+                    except (ValueError, AttributeError):
+                        pass
+                
+                # Jeśli uda się zebrać datetime, sprawdzić filtry
+                if apt_datetime:
+                    if self._fits_time_filters(apt_datetime, 
+                                              preferred_days or [],
+                                              time_range,
+                                              day_time_ranges,
+                                              excluded_dates or []):
+                        filtered_appointments.append(apt)
+                    else:
+                        self.logger.debug(f"Wizyta {apt_datetime} odfiltrowana")
+                else:
+                    # Jeśli nie ma datetime, dodaj wizytę (nie możemy filtrować)
+                    self.logger.debug(f"Nie znaleziono datetime w wizycie: {apt}")
+                    filtered_appointments.append(apt)
+            except Exception as e:
+                self.logger.warning(f"Błąd przetwarzania wizyty: {e}, dodaję do wyników")
+                filtered_appointments.append(apt)
+        
+        self.logger.info(f"Po filtrowaniu: {len(filtered_appointments)} wizyt")
+        
+        # Aktualizacja baz danych
+        if filtered_appointments:
+            self._update_data_from_appointments(filtered_appointments)
             
-        return found_appointments
+        return filtered_appointments
 
-    def book_appointment(self, appointment: Dict[str, Any]) -> Dict[str, Any]:
-        """Publiczna metoda do rezerwacji wizyty. Deleguje zadanie do klienta."""
+    def auto_book_appointment(self,
+                             profile: str,
+                             specialty: str,
+                             doctors: Optional[List[str]] = None,
+                             clinics: Optional[List[str]] = None,
+                             preferred_days: Optional[List[int]] = None,
+                             time_range: Optional[Dict[str, str]] = None,
+                             day_time_ranges: Optional[Dict[str, Dict[str, str]]] = None,
+                             excluded_dates: Optional[List[date]] = None,
+                             auto_book: bool = True,
+                             headless: bool = False) -> Dict[str, Any]:
+        """
+        Wyszukuje i automatycznie rezerwuje pierwszą wolną wizytę spełniającą kryteria.
+        
+        Args:
+            Takie same jak search_appointments + auto_book
+        
+        Returns:
+            Słownik ze statusem rezerwacji
+        """
+        self.logger.info("🤖 Uruchamianie automatycznej rezerwacji...")
+        
+        # Wyszukaj wizyty
+        appointments = self.search_appointments(
+            profile=profile,
+            specialty=specialty,
+            doctors=doctors,
+            clinics=clinics,
+            preferred_days=preferred_days,
+            time_range=time_range,
+            day_time_ranges=day_time_ranges,
+            excluded_dates=excluded_dates,
+            headless=headless
+        )
+        
+        if not appointments:
+            self.logger.warning("❌ Nie znaleziono wolnych wizyt spełniających kryteria")
+            return {
+                'success': False,
+                'message': 'Nie znaleziono wolnych wizyt',
+                'appointments_found': 0
+            }
+        
+        self.logger.info(f"✅ Znaleziono {len(appointments)} wizyt, rezerwuję pierwszą...")
+        
+        # Rezerwuj pierwszą wizytę
+        first_appointment = appointments[0]
+        try:
+            result = self.book_appointment(profile, first_appointment)
+            if result.get('success'):
+                self.logger.info(f"✅ Wizyta zarezerwowana: {first_appointment}")
+                return {
+                    'success': True,
+                    'message': 'Wizyta zarezerwowana',
+                    'appointment': first_appointment,
+                    'total_found': len(appointments)
+                }
+            else:
+                self.logger.error(f"❌ Rezerwacja nie powiodła się: {result}")
+                return {
+                    'success': False,
+                    'message': result.get('message', 'Rezerwacja nie powiodła się'),
+                    'appointments_found': len(appointments)
+                }
+        except Exception as e:
+            self.logger.error(f"❌ Błąd rezerwacji: {e}")
+            return {
+                'success': False,
+                'message': f'Błąd: {e}',
+                'appointments_found': len(appointments)
+            }
+
+    def book_appointment(self, profile: str, appointment: Dict[str, Any]) -> Dict[str, Any]:
+        """Rezerwuje konkretną wizytę."""
+        if profile != self.current_profile:
+            if not self.switch_profile(profile):
+                return {'success': False, 'error': 'profile_switch_failed'}
+        
         if not self.client:
             self.logger.error("Rezerwacja niemożliwa: klient nie jest zainicjalizowany.")
             return {"success": False, "error": "client_not_initialized", "message": "Klient nie jest gotowy."}
-        return self.client.book_appointment(appointment)
+        
+        try:
+            result = self.client.book_appointment(appointment)
+            return result
+        except Exception as e:
+            self.logger.error(f"Błąd rezerwacji: {e}")
+            return {"success": False, "error": "booking_failed", "message": str(e)}
+    
     def run_gui(self):
         """Tworzy i uruchamia interfejs graficzny."""
         print("🚀 Uruchamianie interfejsu graficznego...")
         # Przekazujemy 'self' (czyli całą instancję app) oraz ścieżkę do konfiguracji
+        from gui import MedicoverGUI
         gui = MedicoverGUI(self, self.config_dir)
         gui.run()
+
 def main():
     """Główna funkcja aplikacji, która inicjalizuje i uruchamia GUI."""
     try:
