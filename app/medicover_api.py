@@ -41,6 +41,7 @@ class MedicoverAPI:
     APPOINTMENTS_ENDPOINT = "/appointments/api/search-appointments/slots"
     BOOKING_ENDPOINT = "/appointments/api/search-appointments/book-appointment"
     FILTERS_ENDPOINT = "/service-selector-configurator/api/search-appointments/filters"
+    DEFAULT_REGION_ID = 204 # Warszawa jako domyślny region
     
     def __init__(self, bearer_token: Optional[str] = None):
         self.bearer_token = None
@@ -157,6 +158,11 @@ class MedicoverAPI:
         if 'StartTime' not in final_api_params:
             final_api_params['StartTime'] = datetime.now().strftime("%Y-%m-%d")
         
+        # --- ZABEZPIECZENIE: Domyślny region jeśli brak ---
+        if 'RegionIds' not in final_api_params or not final_api_params['RegionIds']:
+             logger.warning(f"Brak RegionIds w parametrach, dodaję domyślny region: {self.DEFAULT_REGION_ID} (Warszawa)")
+             final_api_params['RegionIds'] = [self.DEFAULT_REGION_ID]
+
         logger.debug(f"Zbudowano finalne parametry zapytania do API: {final_api_params}")
         return final_api_params
         
