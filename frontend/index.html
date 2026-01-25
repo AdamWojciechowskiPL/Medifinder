@@ -3,208 +3,226 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>🏥 Medifinder</title>
-    <link rel="stylesheet" href="/style.css">
+    <title>Medifinder 2.0</title>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="style.css">
 </head>
 <body>
-    <div class="container">
-        <!-- Header -->
-        <header class="header">
-            <h1>🏥 Medifinder</h1>
-            <div class="header-right">
-                 <span id="userLabel"></span>
-                 <button id="authBtn" class="btn btn-sm btn-primary" onclick="loginWithGoogle()">Zaloguj się</button>
-            </div>
-        </header>
-
-        <!-- Login Overlay -->
-        <div id="loginOverlay" class="login-overlay">
-            <div class="login-box">
-                <h2>🔒 Wymagane Logowanie</h2>
-                <p style="color: #6b7280; margin-bottom: 24px;">Zaloguj się, aby uzyskać dostęp do aplikacji</p>
-                <button class="btn btn-primary btn-wide" onclick="loginWithGoogle()">👤 Zaloguj przez Google</button>
-            </div>
-        </div>
-
-        <!-- Main Content -->
-        <div id="appContent" class="hidden">
-            
-            <!-- Sekcja 1: Zarządzanie profilem -->
-            <div class="panel">
-                <div class="panel-row">
-                    <label><strong>👤 Profil:</strong> <span id="currentProfileLabel" style="color: var(--primary); font-weight: 600;">Brak</span></label>
-                    <button class="btn btn-sm btn-link" onclick="toggleProfilesModal()">Zmień profil</button>
-                </div>
-                
-                <div class="panel-row" style="margin-top: 16px;">
-                    <label><strong>🔄 Status Schedulera:</strong> <span id="autoCheckStatus" style="font-weight: 600;">Wyłączony</span></label>
-                </div>
-                <div class="panel-row indent">
-                    <input type="checkbox" id="enableAutoCheck" style="width: 20px; height: 20px; cursor: pointer;">
-                    <label for="enableAutoCheck">Włącz automatyczne sprawdzanie co</label>
-                    <input type="number" id="checkInterval" value="1" min="1" style="width: 60px;">
-                    <label>minut</label>
-                </div>
-
-                <!-- Szczegółowy status schedulera -->
-                <div class="panel-row indent" id="schedulerDetailsRow" style="display: none; margin-top: 12px;">
-                    <div id="schedulerDetails"></div>
-                </div>
-
-                <div class="panel-row" style="margin-top: 16px;">
-                    <label><strong>🎯 Automatyczna Rezerwacja:</strong> <span id="autoBookStatus" style="font-weight: 600;">Wyłączona</span></label>
-                </div>
-                <div class="panel-row indent">
-                    <input type="checkbox" id="autoBook" style="width: 20px; height: 20px; cursor: pointer;">
-                    <label for="autoBook">Rezerwuj automatycznie pierwszą znalezioną wizytę</label>
-                </div>
-
-                <!-- Dni tygodnia i godziny -->
-                <div class="panel-row" style="margin-top: 20px;">
-                    <label style="font-weight: 600; width: 100%;">Preferowane dni tygodnia:</label>
-                    <div class="weekdays-selector" id="weekdaysContainer">
-                        <!-- Generowane przez JS -->
-                    </div>
-                </div>
-                <div class="panel-row" style="margin-top: 12px;">
-                    <label style="font-weight: 600;">Przedział godzinowy:</label>
-                    <label>od</label>
-                    <input type="number" id="hourFrom" value="4" min="0" max="23" class="hour-input">
-                    <label>do</label>
-                    <input type="number" id="hourTo" value="19" min="0" max="23" class="hour-input">
-                </div>
-            </div>
-
-            <!-- Sekcja 2: Kryteria wyszukiwania -->
-            <div class="panel">
-                <div class="panel-header">🔍 Kryteria Wyszukiwania</div>
-                
-                <div class="search-grid">
-                    <!-- Specjalność -->
-                    <div class="search-item">
-                        <label>Specjalność</label>
-                        <select id="specialtySelect" class="form-control">
-                            <option value="">-- Wybierz specjalność --</option>
-                        </select>
-                    </div>
-
-                    <!-- Lekarze Multi-Select -->
-                    <div class="search-item">
-                        <label>Lekarze</label>
-                        <div class="custom-select-container">
-                            <button class="custom-select-trigger" id="doctorsTrigger" onclick="toggleDropdown('doctorsDropdown')">
-                                Wybierz...
-                            </button>
-                            <div class="custom-dropdown" id="doctorsDropdown">
-                                <div class="dropdown-search">
-                                    <input type="text" placeholder="Szukaj lekarza..." onkeyup="filterDropdown(this, 'doctorsList')">
-                                </div>
-                                <div class="dropdown-list" id="doctorsList"></div>
-                                <div class="dropdown-footer">
-                                    <button class="btn btn-sm btn-link" onclick="clearSelection('doctorsList')">Wyczyść</button>
-                                    <button class="btn btn-sm btn-primary" onclick="toggleDropdown('doctorsDropdown')">Gotowe</button>
-                                </div>
-                            </div>
-                        </div>
-                    </div>
-
-                    <!-- Placówki Multi-Select -->
-                    <div class="search-item">
-                        <label>Placówki</label>
-                        <div class="custom-select-container">
-                            <button class="custom-select-trigger" id="clinicsTrigger" onclick="toggleDropdown('clinicsDropdown')">
-                                Wybierz...
-                            </button>
-                            <div class="custom-dropdown" id="clinicsDropdown">
-                                <div class="dropdown-search">
-                                    <input type="text" placeholder="Szukaj placówki..." onkeyup="filterDropdown(this, 'clinicsList')">
-                                </div>
-                                <div class="dropdown-list" id="clinicsList"></div>
-                                <div class="dropdown-footer">
-                                    <button class="btn btn-sm btn-link" onclick="clearSelection('clinicsList')">Wyczyść</button>
-                                    <button class="btn btn-sm btn-primary" onclick="toggleDropdown('clinicsDropdown')">Gotowe</button>
-                                </div>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-
-                <div class="search-grid" style="margin-top: 20px;">
-                    <!-- Daty -->
-                    <div class="search-item">
-                        <label>Data od</label>
-                        <input type="date" id="dateFrom" class="form-control date-input">
-                    </div>
-                    <div class="search-item">
-                        <label>Data do</label>
-                        <input type="date" id="dateTo" class="form-control date-input">
-                    </div>
-
-                    <!-- Przyciski -->
-                    <div class="search-actions">
-                        <button id="searchBtn" class="btn btn-primary btn-wide">🔍 Wyszukaj</button>
-                        <button id="resetBtn" class="btn btn-secondary">🗑️ Wyczyść filtry</button>
-                    </div>
-                </div>
-            </div>
-
-            <!-- Sekcja 3: Akcje na wynikach -->
-            <div class="actions-bar">
-                <button id="bookSelectedBtn" class="btn btn-success" disabled>✅ Zarezerwuj wybraną</button>
-                <button id="exportBtn" class="btn btn-info">💾 Eksportuj CSV</button>
-                <span id="resultsSource"></span>
-            </div>
-
-            <!-- Sekcja 4: Tabela wyników -->
-            <div class="results-table-container">
-                <table class="results-table">
-                    <thead>
-                        <tr>
-                            <th>📅 Data</th>
-                            <th>🕒 Godzina</th>
-                            <th>👨‍⚕️ Lekarz</th>
-                            <th>🎯 Specjalność</th>
-                            <th>🏥 Placówka</th>
-                        </tr>
-                    </thead>
-                    <tbody id="resultsBody">
-                        <tr>
-                            <td colspan="5" style="text-align:center; padding: 40px; color: #6b7280;">
-                                <div style="font-size: 3rem; margin-bottom: 16px;">🔍</div>
-                                <div style="font-size: 1.1rem; font-weight: 500;">Brak wyników</div>
-                                <div style="font-size: 0.9rem; margin-top: 8px;">Użyj wyszukiwania lub włącz scheduler</div>
-                            </td>
-                        </tr>
-                    </tbody>
-                </table>
-            </div>
-
-            <!-- Modal Profile -->
-            <div id="profilesModal" class="modal hidden">
-                <div class="modal-content">
-                    <h3>👥 Zarządzanie Profilami</h3>
-                    <div id="profilesList" class="profiles-list"></div>
-                    <hr style="margin: 24px 0; border: none; border-top: 2px solid var(--light);">
-                    <h4>➕ Dodaj Nowy Profil</h4>
-                    <form id="addProfileForm">
-                        <input type="text" id="newProfileName" placeholder="Nazwa profilu" required class="form-control">
-                        <input type="text" id="newProfileLogin" placeholder="Login" required class="form-control">
-                        <input type="password" id="newProfilePass" placeholder="Hasło" required class="form-control">
-                        <div style="margin: 12px 0; display: flex; align-items: center; gap: 8px;">
-                            <input type="checkbox" id="newProfileIsChild" style="width: 20px; height: 20px;">
-                            <label for="newProfileIsChild" style="margin: 0;">Konto dziecka</label>
-                        </div>
-                        <button type="submit" class="btn btn-success" style="margin-top: 12px; width: 100%;">➕ Dodaj Profil</button>
-                    </form>
-                    <button class="btn btn-secondary close-modal" onclick="toggleProfilesModal()">❌ Zamknij</button>
-                </div>
-            </div>
-            
-            <!-- Toast Notifications -->
-            <div id="toast" class="toast"></div>
+    <!-- Login Overlay -->
+    <div id="loginOverlay" class="login-overlay">
+        <div class="login-box">
+            <h1 class="logo-text">Medifinder</h1>
+            <p>Zaloguj się kontem Google, aby kontynuować</p>
+            <button class="google-btn" onclick="loginWithGoogle()">
+                <img src="https://www.svgrepo.com/show/475656/google-color.svg" alt="G">
+                Zaloguj przez Google
+            </button>
         </div>
     </div>
 
-    <script src="/script.js"></script>
+    <!-- Main App -->
+    <div id="appContent" class="app-container hidden">
+        <!-- Header -->
+        <header class="app-header">
+            <div class="logo">🏥 Medifinder</div>
+            <div class="user-menu">
+                <span id="userLabel" class="user-label">--</span>
+                <span class="separator">|</span>
+                <span id="currentProfileLabel" class="profile-label" onclick="toggleProfilesModal()">Wybierz profil</span>
+                <button id="authBtn" class="btn btn-sm btn-outline">Wyloguj</button>
+            </div>
+        </header>
+
+        <!-- Main Grid -->
+        <main class="main-grid">
+            <!-- Sidebar / Filters -->
+            <aside class="filters-panel">
+                <h3>Filtry wyszukiwania</h3>
+                
+                <div class="form-group">
+                    <label>Specjalność</label>
+                    <select id="specialtySelect" class="form-control">
+                        <option value="">Ładowanie...</option>
+                    </select>
+                </div>
+
+                <div class="form-group">
+                    <label>Lekarze (<span id="doctorsCount">0</span>)</label>
+                    <div class="custom-dropdown" id="doctorsDropdown">
+                        <div class="dropdown-trigger" id="doctorsTrigger" onclick="toggleDropdown('doctorsDropdown')">Wybierz...</div>
+                        <div class="dropdown-content">
+                            <input type="text" class="search-input" placeholder="Szukaj..." onkeyup="filterDropdown(this, 'doctorsList')">
+                            <div class="items-list" id="doctorsList"></div>
+                            <div class="dropdown-actions">
+                                <button class="btn btn-xs" onclick="clearSelection('doctorsList')">Wyczyść</button>
+                                <button class="btn btn-xs btn-primary" onclick="toggleDropdown('doctorsDropdown')">OK</button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="form-group">
+                    <label>Placówki</label>
+                    <div class="custom-dropdown" id="clinicsDropdown">
+                        <div class="dropdown-trigger" id="clinicsTrigger" onclick="toggleDropdown('clinicsDropdown')">Wybierz...</div>
+                        <div class="dropdown-content">
+                            <input type="text" class="search-input" placeholder="Szukaj..." onkeyup="filterDropdown(this, 'clinicsList')">
+                            <div class="items-list" id="clinicsList"></div>
+                            <div class="dropdown-actions">
+                                <button class="btn btn-xs" onclick="clearSelection('clinicsList')">Wyczyść</button>
+                                <button class="btn btn-xs btn-primary" onclick="toggleDropdown('clinicsDropdown')">OK</button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="form-group">
+                    <label>Zakres dat</label>
+                    <div class="date-range">
+                        <input type="date" id="dateFrom" class="form-control">
+                        <span>-</span>
+                        <input type="date" id="dateTo" class="form-control">
+                    </div>
+                </div>
+
+                <div class="form-group">
+                    <label>Dni tygodnia</label>
+                    <div class="weekdays-grid" id="weekdaysContainer">
+                        <!-- JS generated -->
+                    </div>
+                </div>
+
+                <div class="form-group">
+                    <label>Godziny (domyślne)</label>
+                    <div class="time-range">
+                        <input type="number" id="hourFrom" class="form-control" value="04" min="0" max="23">
+                        <span>:00 -</span>
+                        <input type="number" id="hourTo" class="form-control" value="22" min="0" max="23">
+                        <span>:00</span>
+                    </div>
+                </div>
+                
+                <!-- NEW: Advanced Filters Toggle -->
+                <div class="form-group">
+                    <button class="btn btn-sm btn-outline w-100" id="toggleAdvancedFilters">Więcej opcji (wykluczenia, godziny dniowe) ▼</button>
+                </div>
+                
+                <!-- NEW: Advanced Filters Panel (Hidden by default) -->
+                <div id="advancedFiltersPanel" class="advanced-filters hidden" style="margin-top: 10px; padding: 10px; background: #f9fafb; border-radius: 6px; border: 1px solid #e5e7eb;">
+                    <h4 style="font-size: 0.9rem; margin-bottom: 8px;">Wykluczone daty</h4>
+                    <div class="date-add-row" style="display: flex; gap: 6px; margin-bottom: 8px;">
+                        <input type="date" id="excludeDateInput" class="form-control form-control-sm">
+                        <button class="btn btn-sm btn-secondary" id="addExcludedDateBtn">+</button>
+                    </div>
+                    <div id="excludedDatesList" style="display: flex; flex-wrap: wrap; gap: 4px; margin-bottom: 12px;"></div>
+                    
+                    <h4 style="font-size: 0.9rem; margin-bottom: 8px;">Godziny dla dni tygodnia</h4>
+                    <div id="dayTimeRangesContainer" style="display: flex; flex-direction: column; gap: 6px;">
+                        <!-- JS generated -->
+                    </div>
+                </div>
+
+                <div class="actions-row">
+                    <button id="resetBtn" class="btn btn-outline">Reset</button>
+                    <button id="searchBtn" class="btn btn-primary">🔍 Wyszukaj</button>
+                </div>
+            </aside>
+
+            <!-- Main Content / Results -->
+            <section class="results-panel">
+                <!-- Scheduler Control Bar -->
+                <div class="scheduler-bar">
+                    <div class="scheduler-controls">
+                        <label class="switch">
+                            <input type="checkbox" id="enableAutoCheck">
+                            <span class="slider round"></span>
+                        </label>
+                        <div class="status-box">
+                            <span class="status-label">Automat:</span>
+                            <span id="autoCheckStatus" class="status-value">Wyłączony</span>
+                        </div>
+                        <div class="interval-select">
+                            <span>co</span>
+                            <select id="checkInterval" class="form-control form-control-sm" style="width: auto;">
+                                <option value="2">2 min</option>
+                                <option value="5" selected>5 min</option>
+                                <option value="10">10 min</option>
+                                <option value="15">15 min</option>
+                                <option value="30">30 min</option>
+                                <option value="60">60 min</option>
+                            </select>
+                        </div>
+                    </div>
+                    
+                    <div class="autobook-control">
+                        <label class="checkbox-label" title="Automatycznie rezerwuje pierwszą znalezioną wizytę">
+                            <input type="checkbox" id="autoBook"> ⚡ Auto-Rezerwacja
+                        </label>
+                        <span id="autoBookStatus" style="font-size: 0.8rem; margin-left: 8px; color: var(--dark);"></span>
+                    </div>
+                </div>
+
+                <!-- Scheduler Details (Hidden when inactive) -->
+                <div id="schedulerDetailsRow" class="scheduler-details" style="display:none; padding: 10px 16px; background: #f0fdf4; border-bottom: 1px solid #dcfce7;">
+                     <div id="schedulerDetails" style="font-size: 0.85rem; color: #166534;"></div>
+                </div>
+
+                <!-- Results Toolbar -->
+                <div class="results-header">
+                    <h2>Wyniki wyszukiwania <span id="resultsSource" style="font-size: 0.8rem; font-weight: normal; color: #6b7280; margin-left: 10px;"></span></h2>
+                    <div class="results-actions">
+                        <button id="exportBtn" class="btn btn-sm btn-outline">Eksport CSV</button>
+                        <button id="bookSelectedBtn" class="btn btn-sm btn-success" disabled>Zarezerwuj zaznaczoną</button>
+                    </div>
+                </div>
+
+                <!-- Results Table -->
+                <div class="table-container">
+                    <table class="results-table">
+                        <thead>
+                            <tr>
+                                <th>Data</th>
+                                <th>Godzina</th>
+                                <th>Lekarz</th>
+                                <th>Specjalność</th>
+                                <th>Placówka</th>
+                            </tr>
+                        </thead>
+                        <tbody id="resultsBody">
+                            <tr>
+                                <td colspan="5" style="text-align:center; padding: 40px; color: #6b7280;">
+                                    Użyj filtrów i kliknij szukaj
+                                </td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+            </section>
+        </main>
+    </div>
+
+    <!-- Profiles Modal -->
+    <div id="profilesModal" class="modal hidden">
+        <div class="modal-content">
+            <span class="close-modal" onclick="toggleProfilesModal()">&times;</span>
+            <h3>Wybierz profil Medicover</h3>
+            <div id="profilesList" class="profiles-list"></div>
+            
+            <hr>
+            <h4>Dodaj nowy profil</h4>
+            <form id="addProfileForm" class="add-profile-form">
+                <input type="text" id="newProfileName" placeholder="Nazwa (np. Jan)" required>
+                <input type="text" id="newProfileLogin" placeholder="Numer karty (MRN)" required>
+                <input type="password" id="newProfilePass" placeholder="Hasło" required>
+                <label><input type="checkbox" id="newProfileIsChild"> Konto dziecka?</label>
+                <button type="submit" class="btn btn-primary w-100">Dodaj profil</button>
+            </form>
+        </div>
+    </div>
+
+    <!-- Toast Notification -->
+    <div id="toast" class="toast"></div>
+
+    <script src="script.js"></script>
 </body>
 </html>
