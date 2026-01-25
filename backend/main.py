@@ -1,4 +1,3 @@
-
 import os
 import sys
 import shutil
@@ -267,7 +266,8 @@ def scheduler_start():
                 'end_date': data.get('end_date')
             },
             interval_minutes=data.get('interval_minutes', 5),
-            auto_book=data.get('auto_book', False)
+            auto_book=data.get('auto_book', False),
+            twin_profile=data.get('twin_profile')
         )
         return jsonify(result), 200
     except Exception as e:
