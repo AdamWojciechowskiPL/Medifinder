@@ -233,7 +233,18 @@ class MedicoverApp:
         if not self.profile_manager.profiles_path.exists(): self.logger.warning("Nie znaleziono pliku profili.")
 
     def switch_profile(self, profile_name: str) -> bool: return False
-    def get_available_profiles(self, user_email: str) -> List[str]: return [p.username for p in self.profile_manager.get_user_profiles(user_email)]
+
+    def get_available_profiles(self, user_email: str) -> List[Dict[str, Any]]:
+        """Zwraca listę dostępnych profili dla danego użytkownika."""
+        return [
+            {
+                "login": p.username,
+                "name": p.description if p.description else p.username,
+                "is_child": p.is_child_account
+            }
+            for p in self.profile_manager.get_user_profiles(user_email)
+        ]
+
     def get_current_profile(self) -> Optional[str]: return self.current_profile
     def add_profile(self, user_email: str, login: str, password: str, name: str, is_child_account: bool = False) -> bool: return self.profile_manager.add_profile(user_email, login, password, name, is_child_account)
 
