@@ -327,38 +327,32 @@ function renderResults() {
     }
 
     searchResults.forEach((apt, index) => {
-        // Fix for "Invalid Date"
-        // Medicover sometimes returns date as ISO string (e.g. 2026-01-25T14:00:00)
-        // or a custom object. Ensure we parse correctly.
-        let dateObj;
-        if (apt.date && !(apt.date instanceof Date)) {
-             dateObj = new Date(apt.date);
-        } else if (apt.datetime && !(apt.datetime instanceof Date)) {
-            dateObj = new Date(apt.datetime);
-        } else if (apt.visitDate && !(apt.visitDate instanceof Date)) {
-             dateObj = new Date(apt.visitDate);
-        } else {
-             // Fallback attempt
-             // DON'T default to new Date() as it confuses users. show error or empty.
-             dateObj = null;
-        }
+        // EXACT REPLICA OF DESKTOP LOGIC: Uses 'appointmentDate' field
+        let dateObj = null;
+        const datetime_str = apt.appointmentDate || ""; 
         
-        // Also sometimes backend returns date object with 'date' field inside
-        if (apt.date && apt.date.date) {
-            dateObj = new Date(apt.date.date);
+        if (datetime_str) {
+             // Handle ISO string which might have 'Z' or offset
+             const clean_str = datetime_str.replace('Z', '+00:00');
+             dateObj = new Date(clean_str);
         }
 
         const dateStr = (dateObj && !isNaN(dateObj)) ? dateObj.toLocaleDateString('pl-PL') : 'Błąd daty';
         const timeStr = (dateObj && !isNaN(dateObj)) ? dateObj.toLocaleTimeString('pl-PL', {hour:'2-digit', minute:'2-digit'}) : '--:--';
         
+        // Extract names similar to desktop
+        const doctorName = apt.doctor && apt.doctor.name ? apt.doctor.name : "Nieznany lekarz";
+        const specialtyName = apt.specialty && apt.specialty.name ? apt.specialty.name : "Nieznana specjalność";
+        const clinicName = apt.clinic && apt.clinic.name ? apt.clinic.name : "Nieznana placówka";
+
         const tr = document.createElement('tr');
         tr.onclick = () => selectRow(tr, apt);
         tr.innerHTML = `
             <td>${dateStr}</td>
             <td>${timeStr}</td>
-            <td>${apt.doctor_name || apt.doctor?.name}</td>
-            <td>${apt.specialty_name || apt.specialty?.name}</td>
-            <td>${apt.clinic_name || apt.clinic?.name}</td>
+            <td>${doctorName}</td>
+            <td>${specialtyName}</td>
+            <td>${clinicName}</td>
         `;
         tbody.appendChild(tr);
     });
@@ -377,27 +371,29 @@ function selectRow(tr, apt) {
 async function bookSelected() {
     if (!selectedAppointment) return;
     
-    const docName = selectedAppointment.doctor_name || selectedAppointment.doctor?.name;
-    // Better date display for confirmation
-    let dateObj;
-     if (selectedAppointment.date && selectedAppointment.date.date) {
-            dateObj = new Date(selectedAppointment.date.date);
-    } else if (selectedAppointment.date) {
-         dateObj = new Date(selectedAppointment.date);
-    } else if (selectedAppointment.datetime) {
-        dateObj = new Date(selectedAppointment.datetime);
-    } else if (selectedAppointment.visitDate) {
-         dateObj = new Date(selectedAppointment.visitDate);
+    const docName = selectedAppointment.doctor && selectedAppointment.doctor.name ? selectedAppointment.doctor.name : "Nieznany";
+    
+    let dateObj = null;
+    const datetime_str = selectedAppointment.appointmentDate || "";
+    if (datetime_str) {
+         const clean_str = datetime_str.replace('Z', '+00:00');
+         dateObj = new Date(clean_str);
     }
     
     const dateVal = (dateObj && !isNaN(dateObj)) 
         ? dateObj.toLocaleString('pl-PL') 
-        : (selectedAppointment.datetime || selectedAppointment.visitDate || selectedAppointment.date);
+        : "Nieznana data";
 
     if (!confirm(`Czy na pewno chcesz zarezerwować wizytę?\n\nLekarz: ${docName}\nData: ${dateVal}`)) return;
 
-    // Use appointmentId if available, fallback to id
+    // Use bookingString which is MANDATORY for client
+    const bookingString = selectedAppointment.bookingString;
     const aptId = selectedAppointment.appointmentId || selectedAppointment.id;
+
+    if (!bookingString) {
+        showToast('Błąd: Wybrana wizyta nie posiada identyfikatora rezerwacji (bookingString)', 'error');
+        return;
+    }
 
     try {
         const resp = await fetch(`${API_URL}/api/v1/appointments/book`, {
@@ -406,14 +402,15 @@ async function bookSelected() {
             credentials: 'include',
             body: JSON.stringify({
                 profile: currentProfile,
-                appointment_id: aptId 
+                appointment_id: aptId,
+                booking_string: bookingString // SENDING REQUIRED FIELD
             })
         });
         const data = await resp.json();
         if (data.success) {
             showToast('Zarezerwowano pomyślnie!', 'success');
-            // Remove from list
-            searchResults = searchResults.filter(a => a.id !== selectedAppointment.id);
+            // Remove from list using IDs if possible, or object ref
+            searchResults = searchResults.filter(a => a !== selectedAppointment);
             renderResults();
             selectedAppointment = null;
             document.getElementById('bookSelectedBtn').disabled = true;
@@ -422,6 +419,7 @@ async function bookSelected() {
         }
     } catch (e) {
         showToast('Błąd krytyczny', 'error');
+        console.error(e);
     }
 }
 
@@ -430,12 +428,20 @@ function exportResults() {
     
     let csvContent = "Data,Godzina,Lekarz,Specjalnosc,Placowka\n";
     searchResults.forEach(row => {
-        const d = new Date(row.datetime || row.visitDate || row.date);
-        const date = d.toLocaleDateString();
-        const time = d.toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'});
-        const doc = row.doctor_name || row.doctor?.name || '';
-        const spec = row.specialty_name || row.specialty?.name || '';
-        const clin = row.clinic_name || row.clinic?.name || '';
+        let dateObj = null;
+        const datetime_str = row.appointmentDate || "";
+        if (datetime_str) {
+             const clean_str = datetime_str.replace('Z', '+00:00');
+             dateObj = new Date(clean_str);
+        }
+
+        const date = (dateObj && !isNaN(dateObj)) ? dateObj.toLocaleDateString() : "";
+        const time = (dateObj && !isNaN(dateObj)) ? dateObj.toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'}) : "";
+        
+        const doc = row.doctor && row.doctor.name ? row.doctor.name : "";
+        const spec = row.specialty && row.specialty.name ? row.specialty.name : "";
+        const clin = row.clinic && row.clinic.name ? row.clinic.name : "";
+        
         csvContent += `${date},${time},"${doc}","${spec}","${clin}"\n`;
     });
 
