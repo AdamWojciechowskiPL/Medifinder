@@ -158,6 +158,16 @@
                         <label class="checkbox-label" title="Automatycznie rezerwuje pierwszą znalezioną wizytę">
                             <input type="checkbox" id="autoBook"> ⚡ Auto-Rezerwacja
                         </label>
+                        <!-- TWIN BOOKING UI -->
+                        <div class="twin-booking-container" style="margin-left: 10px; display: inline-flex; align-items: center; border-left: 1px solid #ccc; padding-left: 10px;">
+                            <label class="checkbox-label" title="Rezerwuj wizyty dla rodzeństwa po sobie">
+                                <input type="checkbox" id="enableTwinBooking"> 👯 Bliźniak
+                            </label>
+                            <select id="twinProfileSelect" class="form-control form-control-sm" style="width: auto; margin-left: 5px; display: none;">
+                                <option value="">Wybierz drugie dziecko...</option>
+                            </select>
+                        </div>
+
                         <span id="autoBookStatus" style="font-size: 0.8rem; margin-left: 8px; color: var(--dark);"></span>
                     </div>
                 </div>
