@@ -156,8 +156,11 @@ class MedicoverApp:
             self.logger.error(f"Błąd podczas wyszukiwania: {e}", exc_info=True)
             return []
 
-    def book_appointment(self, user_email: str, profile: str, appointment_id: int) -> Dict[str, Any]:
-        """Publiczna metoda do rezerwacji wizyty."""
+    def book_appointment(self, user_email: str, profile: str, appointment_id: Any, booking_string: str = None) -> Dict[str, Any]:
+        """
+        Publiczna metoda do rezerwacji wizyty.
+        Obsługuje przekazywanie bookingString, który jest wymagany przez API Medicover.
+        """
         if not user_email or not profile:
              return {"success": False, "message": "Brak danych profilu"}
              
@@ -175,12 +178,21 @@ class MedicoverApp:
             if not temp_client.login(username, password):
                  return {"success": False, "message": "Błąd logowania"}
             
-            # Rezerwacja wymaga obiektu appointment lub chociaż ID. 
-            # MedicoverClient.book_appointment oczekuje całego słownika wizyty,
-            # więc tutaj musielibyśmy najpierw pobrać szczegóły wizyty lub skonstruować obiekt.
-            # Zakładam, że client ma metodę book_appointment_by_id lub radzi sobie z minimalnym obiektem.
-            fake_appointment_obj = {"id": appointment_id}
-            return temp_client.book_appointment(fake_appointment_obj)
+            # Konstruujemy obiekt wizyty zgodny z oczekiwaniami MedicoverClient
+            # Kluczowe jest pole 'bookingString'.
+            # appointment_id jest zachowany dla kompatybilności wstecznej, ale API wymaga stringa.
+            
+            appointment_obj = {}
+            if booking_string:
+                appointment_obj["bookingString"] = booking_string
+            
+            if appointment_id:
+                 appointment_obj["id"] = appointment_id
+
+            if not appointment_obj.get("bookingString"):
+                return {"success": False, "message": "Brak wymaganego pola 'bookingString' do rezerwacji."}
+
+            return temp_client.book_appointment(appointment_obj)
             
         except Exception as e:
             self.logger.error(f"Błąd rezerwacji: {e}")
