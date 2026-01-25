@@ -24,6 +24,7 @@ body {
     background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
     min-height: 100vh;
     color: var(--dark);
+    overflow-x: hidden; /* Prevent horizontal scroll on body */
 }
 
 /* App Container */
@@ -35,6 +36,8 @@ body {
     display: flex;
     flex-direction: column;
     gap: 20px;
+    width: 100%; /* Ensure container respects viewport */
+    overflow-x: hidden; /* Prevent overflow within container */
 }
 
 /* Header */
@@ -90,6 +93,7 @@ body {
     grid-template-columns: 320px 1fr;
     gap: 20px;
     align-items: start;
+    width: 100%;
 }
 
 /* Panels */
@@ -98,6 +102,7 @@ body {
     border-radius: 16px;
     padding: 20px;
     box-shadow: var(--shadow);
+    width: 100%; /* Ensure panels don't overflow */
 }
 
 .filters-panel h3 {
@@ -111,6 +116,7 @@ body {
 /* Forms */
 .form-group {
     margin-bottom: 16px;
+    width: 100%; /* Ensure form groups don't overflow */
 }
 
 .form-group label {
@@ -123,6 +129,7 @@ body {
 
 .form-control {
     width: 100%;
+    max-width: 100%; /* Prevent inputs from forcing overflow */
     padding: 8px 12px;
     border: 2px solid var(--border);
     border-radius: 8px;
@@ -140,11 +147,18 @@ body {
     display: flex;
     align-items: center;
     gap: 8px;
+    width: 100%; /* Ensure ranges fit container */
+}
+
+.date-range input, .time-range input {
+    flex: 1; /* Allow inputs to shrink/grow */
+    min-width: 0; /* Allow flex items to shrink below content size */
 }
 
 .time-range span, .date-range span {
     color: #6b7280;
     font-weight: 500;
+    flex-shrink: 0;
 }
 
 /* Weekdays Grid */
@@ -152,6 +166,7 @@ body {
     display: grid;
     grid-template-columns: repeat(7, 1fr);
     gap: 4px;
+    width: 100%;
 }
 
 .weekday-item {
@@ -163,6 +178,8 @@ body {
     cursor: pointer;
     background: white;
     transition: all 0.2s;
+    min-width: 0; /* Prevent overflow */
+    overflow: hidden;
 }
 
 .weekday-item:hover {
@@ -180,6 +197,7 @@ body {
 .custom-dropdown {
     position: relative;
     width: 100%;
+    max-width: 100%;
 }
 
 .dropdown-trigger {
@@ -196,6 +214,7 @@ body {
     overflow: hidden;
     text-overflow: ellipsis;
     position: relative;
+    max-width: 100%;
 }
 
 .dropdown-trigger::after {
@@ -219,6 +238,7 @@ body {
     box-shadow: var(--shadow-lg);
     z-index: 100;
     padding: 12px;
+    max-width: 90vw; /* Prevent dropdown from being wider than screen */
 }
 
 .custom-dropdown.active .dropdown-content {
@@ -268,6 +288,7 @@ body {
     align-items: center;
     justify-content: center;
     gap: 6px;
+    max-width: 100%;
 }
 
 .btn:disabled {
@@ -314,6 +335,7 @@ body {
     display: flex;
     gap: 10px;
     margin-top: 24px;
+    flex-wrap: wrap; /* Allow wrapping on small screens */
 }
 
 .actions-row .btn { flex: 1; }
@@ -333,6 +355,7 @@ body {
     display: flex;
     align-items: center;
     gap: 12px;
+    flex-wrap: wrap; /* Wrap controls */
 }
 
 /* Switch Toggle */
@@ -341,6 +364,7 @@ body {
     display: inline-block;
     width: 44px;
     height: 24px;
+    flex-shrink: 0;
 }
 .switch input { opacity: 0; width: 0; height: 0; }
 .slider {
@@ -389,6 +413,8 @@ input:checked + .slider:before { transform: translateX(20px); }
     justify-content: space-between;
     align-items: center;
     margin-bottom: 16px;
+    flex-wrap: wrap;
+    gap: 12px;
 }
 
 .results-header h2 {
@@ -400,12 +426,14 @@ input:checked + .slider:before { transform: translateX(20px); }
     overflow-x: auto;
     border-radius: 8px;
     border: 1px solid var(--border);
+    max-width: 100%; /* Prevent table container overflow */
 }
 
 .results-table {
     width: 100%;
     border-collapse: collapse;
     font-size: 0.9rem;
+    min-width: 600px; /* Force scroll on small screens */
 }
 
 .results-table th {
@@ -433,6 +461,7 @@ input:checked + .slider:before { transform: translateX(20px); }
     justify-content: center;
     align-items: center;
     z-index: 2000;
+    padding: 20px; /* Ensure padding on small screens */
 }
 
 .login-box {
@@ -483,6 +512,7 @@ input:checked + .slider:before { transform: translateX(20px); }
     justify-content: center;
     align-items: center;
     z-index: 1500;
+    padding: 20px;
 }
 
 .modal.hidden { display: none; }
@@ -495,6 +525,8 @@ input:checked + .slider:before { transform: translateX(20px); }
     max-width: 400px;
     box-shadow: var(--shadow-lg);
     position: relative;
+    max-height: 90vh; /* Prevent modal overflow vertical */
+    overflow-y: auto;
 }
 
 .close-modal {
@@ -520,6 +552,8 @@ input:checked + .slider:before { transform: translateX(20px); }
     pointer-events: none;
     transition: all 0.3s;
     transform: translateY(20px);
+    max-width: 90%; /* Ensure toast doesn't overflow mobile */
+    z-index: 3000;
 }
 
 .toast.visible {
@@ -537,20 +571,25 @@ input:checked + .slider:before { transform: translateX(20px); }
 /* Responsive */
 @media (max-width: 768px) {
     .app-container {
-        padding: 10px;
-        gap: 10px;
+        padding: 12px;
+        gap: 16px;
     }
 
     .app-header {
         flex-direction: column;
-        gap: 12px;
+        gap: 16px;
         text-align: center;
+        padding: 20px;
     }
 
     .user-menu {
         flex-direction: column;
-        gap: 8px;
+        gap: 10px;
         width: 100%;
+    }
+    
+    #userLabel {
+        word-break: break-all; /* Allow breaking long emails */
     }
 
     .main-grid {
@@ -560,10 +599,21 @@ input:checked + .slider:before { transform: translateX(20px); }
     .scheduler-bar {
         flex-direction: column;
         align-items: flex-start;
+        gap: 12px;
     }
     
     .scheduler-controls {
         flex-wrap: wrap;
+        width: 100%;
+        gap: 12px;
+    }
+    
+    /* Ensure advanced inputs don't overflow */
+    .date-add-row {
+        flex-direction: column;
+    }
+    
+    .date-add-row button {
         width: 100%;
     }
 
@@ -576,10 +626,11 @@ input:checked + .slider:before { transform: translateX(20px); }
     .results-actions {
         width: 100%;
         display: flex;
+        flex-direction: column;
         gap: 8px;
     }
     
     .results-actions button {
-        flex: 1;
+        width: 100%;
     }
 }
