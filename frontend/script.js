@@ -254,7 +254,9 @@ function setDefaultDates() {
 // =========================
 
 function toggleCyclicCheck() {
-    const enabled = document.getElementById('enableAutoCheck').checked;
+    const checkbox = document.getElementById('enableAutoCheck');
+    const enabled = checkbox.checked;
+    
     if (enabled) {
         startCyclicCheck();
     } else {
@@ -275,8 +277,14 @@ function startCyclicCheck() {
     const intervalMin = parseInt(document.getElementById('checkInterval').value) || 1;
     const intervalMs = intervalMin * 60 * 1000;
     
-    document.getElementById('autoCheckStatus').textContent = `Włączone (co ${intervalMin} min)`;
-    document.getElementById('autoCheckStatus').style.color = 'green';
+    // Update UI to show active state
+    const checkbox = document.getElementById('enableAutoCheck');
+    checkbox.checked = true; // Explicitly set checkbox state
+    
+    const statusEl = document.getElementById('autoCheckStatus');
+    statusEl.textContent = `Włączone (co ${intervalMin} min)`;
+    statusEl.style.color = 'green';
+    statusEl.style.fontWeight = 'bold';
     
     // First run immediately
     runCyclicTask();
@@ -296,9 +304,14 @@ function stopCyclicCheck() {
     countdownIntervalId = null;
     nextCheckTime = null;
     
-    document.getElementById('enableAutoCheck').checked = false;
-    document.getElementById('autoCheckStatus').textContent = "Wyłączone";
-    document.getElementById('autoCheckStatus').style.color = 'black';
+    // Update UI to show inactive state
+    const checkbox = document.getElementById('enableAutoCheck');
+    checkbox.checked = false; // Explicitly uncheck
+    
+    const statusEl = document.getElementById('autoCheckStatus');
+    statusEl.textContent = "Wyłączone";
+    statusEl.style.color = 'black';
+    statusEl.style.fontWeight = 'normal';
 }
 
 function startCountdown() {
@@ -314,33 +327,45 @@ function startCountdown() {
         
         if (diff <= 0) {
             statusEl.textContent = "Sprawdzanie...";
+            statusEl.style.color = 'orange';
         } else {
             const min = Math.floor(diff / 60000);
             const sec = Math.floor((diff % 60000) / 1000);
             statusEl.textContent = `Następne za ${min}:${sec.toString().padStart(2, '0')}`;
+            statusEl.style.color = 'green';
         }
     }, 1000);
 }
 
 async function runCyclicTask() {
-    console.log("Running cyclic task...");
+    console.log("[CYCLIC] Running cyclic task...");
     
-    // If auto-book is enabled, check if we found something relevant
     const autoBookEnabled = document.getElementById('autoBook').checked;
     
     // Perform search
     const results = await searchAppointments(true); // isBackground = true
     
     if (autoBookEnabled && results && results.length > 0) {
-        // Try to book the first one
-        console.log("Auto-book enabled, booking first result...");
+        console.log("[CYCLIC] Auto-book enabled, booking first result...");
         const success = await performBooking(results[0], true); // silent = true
         
         if (success) {
-            console.log("Auto-booking successful! Stopping cyclic check.");
+            console.log("[CYCLIC] Auto-booking successful! Stopping cyclic check.");
             stopCyclicCheck();
             showToast('✅ Sukces! Automatycznie zarezerwowano wizytę.', 'success');
-            // Play sound notification?
+            
+            // Update auto-book status
+            const autoBookStatusEl = document.getElementById('autoBookStatus');
+            if (autoBookStatusEl) {
+                autoBookStatusEl.textContent = "Wykonano";
+                autoBookStatusEl.style.color = 'green';
+                autoBookStatusEl.style.fontWeight = 'bold';
+            }
+            
+            // Disable auto-book checkbox
+            document.getElementById('autoBook').checked = false;
+            
+            // Play notification sound
             try { new Audio('/notification.mp3').play(); } catch(e){}
         }
     }
@@ -352,18 +377,18 @@ async function runCyclicTask() {
 
 
 async function searchAppointments(isBackground = false) {
-    if (!currentProfile) { showToast('Brak wybranego profilu', 'error'); return []; }
+    if (!currentProfile) { 
+        if (!isBackground) showToast('Brak wybranego profilu', 'error'); 
+        return []; 
+    }
 
     const specVal = document.getElementById('specialtySelect').value;
     
-    // Fix: Use index 0-6 for Python weekday compatibility if needed, or stick to ISO
-    // In desktop: 0=Mon, 6=Sun. HTML values: 0-6
     const preferredDays = Array.from(document.querySelectorAll('#weekdaysContainer input:checked'))
         .map(cb => parseInt(cb.value));
 
     const hFrom = document.getElementById('hourFrom').value.padStart(2, '0') + ":00";
     const hTo = document.getElementById('hourTo').value.padStart(2, '0') + ":00";
-    const dFrom = document.getElementById('dateFrom').value;
     
     const payload = {
         profile: currentProfile,
