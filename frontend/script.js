@@ -331,20 +331,25 @@ function renderResults() {
         // Medicover sometimes returns date as ISO string (e.g. 2026-01-25T14:00:00)
         // or a custom object. Ensure we parse correctly.
         let dateObj;
-        if (apt.date) {
-            // Some versions return 'date' field directly
-            dateObj = new Date(apt.date);
-        } else if (apt.datetime) {
+        if (apt.date && !(apt.date instanceof Date)) {
+             dateObj = new Date(apt.date);
+        } else if (apt.datetime && !(apt.datetime instanceof Date)) {
             dateObj = new Date(apt.datetime);
-        } else if (apt.visitDate) {
+        } else if (apt.visitDate && !(apt.visitDate instanceof Date)) {
              dateObj = new Date(apt.visitDate);
         } else {
              // Fallback attempt
-             dateObj = new Date();
+             // DON'T default to new Date() as it confuses users. show error or empty.
+             dateObj = null;
+        }
+        
+        // Also sometimes backend returns date object with 'date' field inside
+        if (apt.date && apt.date.date) {
+            dateObj = new Date(apt.date.date);
         }
 
-        const dateStr = !isNaN(dateObj) ? dateObj.toLocaleDateString('pl-PL') : 'Błąd daty';
-        const timeStr = !isNaN(dateObj) ? dateObj.toLocaleTimeString('pl-PL', {hour:'2-digit', minute:'2-digit'}) : '--:--';
+        const dateStr = (dateObj && !isNaN(dateObj)) ? dateObj.toLocaleDateString('pl-PL') : 'Błąd daty';
+        const timeStr = (dateObj && !isNaN(dateObj)) ? dateObj.toLocaleTimeString('pl-PL', {hour:'2-digit', minute:'2-digit'}) : '--:--';
         
         const tr = document.createElement('tr');
         tr.onclick = () => selectRow(tr, apt);
@@ -373,9 +378,26 @@ async function bookSelected() {
     if (!selectedAppointment) return;
     
     const docName = selectedAppointment.doctor_name || selectedAppointment.doctor?.name;
-    const dateVal = selectedAppointment.datetime || selectedAppointment.visitDate || selectedAppointment.date;
+    // Better date display for confirmation
+    let dateObj;
+     if (selectedAppointment.date && selectedAppointment.date.date) {
+            dateObj = new Date(selectedAppointment.date.date);
+    } else if (selectedAppointment.date) {
+         dateObj = new Date(selectedAppointment.date);
+    } else if (selectedAppointment.datetime) {
+        dateObj = new Date(selectedAppointment.datetime);
+    } else if (selectedAppointment.visitDate) {
+         dateObj = new Date(selectedAppointment.visitDate);
+    }
+    
+    const dateVal = (dateObj && !isNaN(dateObj)) 
+        ? dateObj.toLocaleString('pl-PL') 
+        : (selectedAppointment.datetime || selectedAppointment.visitDate || selectedAppointment.date);
 
     if (!confirm(`Czy na pewno chcesz zarezerwować wizytę?\n\nLekarz: ${docName}\nData: ${dateVal}`)) return;
+
+    // Use appointmentId if available, fallback to id
+    const aptId = selectedAppointment.appointmentId || selectedAppointment.id;
 
     try {
         const resp = await fetch(`${API_URL}/api/v1/appointments/book`, {
@@ -384,7 +406,7 @@ async function bookSelected() {
             credentials: 'include',
             body: JSON.stringify({
                 profile: currentProfile,
-                appointment_id: selectedAppointment.appointmentId || selectedAppointment.id 
+                appointment_id: aptId 
             })
         });
         const data = await resp.json();
