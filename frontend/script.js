@@ -87,6 +87,9 @@ document.addEventListener('DOMContentLoaded', () => {
     // Cyclic Check Listeners - Now controls backend scheduler
     document.getElementById('enableAutoCheck').addEventListener('change', toggleBackendScheduler);
     document.getElementById('checkInterval').addEventListener('change', updateSchedulerInterval);
+    
+    // Auto-booking toggle listener - restarts scheduler if running
+    document.getElementById('autoBook').addEventListener('change', handleAutoBookToggle);
 });
 
 async function checkAuth() {
@@ -478,6 +481,15 @@ async function updateSchedulerInterval() {
     }
 }
 
+async function handleAutoBookToggle() {
+    // If scheduler is running, restart it with new auto-book setting
+    const checkbox = document.getElementById('enableAutoCheck');
+    if (checkbox.checked) {
+        showToast('🔄 Aktualizowanie schedulera...', 'success');
+        await startBackendScheduler();
+    }
+}
+
 async function startBackendScheduler() {
     if (!currentProfile) {
         showToast('Wybierz profil przed uruchomieniem', 'error');
@@ -638,9 +650,17 @@ async function checkSchedulerStatus() {
                 
                 // Update auto-book status
                 const autoBookStatusEl = document.getElementById('autoBookStatus');
+                
+                // Sync checkbox state if needed (careful not to loop)
+                // document.getElementById('autoBook').checked = status.auto_book; 
+                // Don't auto-update checkbox from backend status blindly to avoid confusing user while they toggle
+                
                 if (status.auto_book) {
                     autoBookStatusEl.textContent = 'Włączona';
                     autoBookStatusEl.style.color = 'var(--success)';
+                } else {
+                    autoBookStatusEl.textContent = 'Wyłączona';
+                    autoBookStatusEl.style.color = 'var(--dark)';
                 }
                 
                 // Start polling if not already running
