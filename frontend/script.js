@@ -38,6 +38,9 @@ const LEGACY_FILTERS_KEY = 'medifinder_last_filters';
 
 const SELECTED_PROFILE_KEY = 'medifinder_selected_profile';
 
+let schedulerCountdownInterval = null;
+let schedulerCountdownNextRunIso = null;
+
 function getDefaultFilters() {
     return {
         specialtyIds: [],
@@ -755,7 +758,6 @@ async function checkSchedulerStatus() {
         const statusBox = document.getElementById('autoCheckStatus');
         const switchEl = document.getElementById('enableAutoCheck');
         const detailsRow = document.getElementById('schedulerDetailsRow');
-        const detailsText = document.getElementById('schedulerDetails');
 
         if (json.success && json.data && json.data.active) {
             state.schedulerStatus = json.data;
@@ -768,16 +770,10 @@ async function checkSchedulerStatus() {
             setFiltersEnabled(false);
             setSchedulerOptionsEnabled(false);
 
-            // Show details
-            detailsRow.style.display = 'block';
-            let info = `Następne: ${formatTime(json.data.next_run)} | Przebiegi: ${json.data.runs_count}`;
-            if (json.data.last_results) {
-                info += ` | Ost. wynik: ${json.data.last_results.count} wizyt (${formatTime(json.data.last_results.timestamp)})`;
-            }
-            if (json.data.twin_profile) {
-                info += ` | 👯 Tryb Bliźniak: ${getProfileDisplayLabel(json.data.twin_profile)}`;
-            }
-            detailsText.textContent = info;
+            // Show details + countdown
+            if (detailsRow) detailsRow.style.display = 'block';
+            renderSchedulerDetails();
+            startSchedulerCountdown(json.data.next_run);
 
             // If we have fresh results from scheduler, show them
             if (json.data.last_results && json.data.last_results.appointments) {
@@ -791,7 +787,9 @@ async function checkSchedulerStatus() {
             statusBox.textContent = 'Wyłączony';
             statusBox.classList.remove('active');
             switchEl.checked = false;
-            detailsRow.style.display = 'none';
+
+            stopSchedulerCountdown();
+            if (detailsRow) detailsRow.style.display = 'none';
 
             setManualSearchEnabled(true);
             setFiltersEnabled(true);
@@ -992,10 +990,94 @@ function clearSelection(listId) {
     }
 }
 
-function formatTime(isoStr) {
-    const d = parseUtcDate(isoStr);
+function formatCountdown(nextRunIsoStr) {
+    const d = parseUtcDate(nextRunIsoStr);
     if (!d || Number.isNaN(d.getTime())) return '--:--';
-    return d.toLocaleTimeString('pl-PL', { hour: '2-digit', minute: '2-digit' });
+
+    // ceil => bardziej "uczciwe" odliczanie (np. po opóźnieniach sieciowych / selenium)
+    const diffSec = Math.max(0, Math.ceil((d.getTime() - Date.now()) / 1000));
+
+    const h = Math.floor(diffSec / 3600);
+    const m = Math.floor((diffSec % 3600) / 60);
+    const s = diffSec % 60;
+
+    if (h > 0) {
+        return `${pad2(h)}:${pad2(m)}:${pad2(s)}`;
+    }
+    return `${pad2(m)}:${pad2(s)}`;
+}
+
+function renderSchedulerDetails() {
+    const detailsRow = document.getElementById('schedulerDetailsRow');
+    const detailsText = document.getElementById('schedulerDetails');
+    if (!detailsRow || !detailsText) return;
+
+    const st = state.schedulerStatus;
+    if (!st || !st.active) {
+        detailsRow.style.display = 'none';
+        return;
+    }
+
+    detailsRow.style.display = 'block';
+
+    const runsCount = st.runs_count ?? 0;
+    const countdown = formatCountdown(st.next_run);
+
+    let info = `Następne za: ${countdown} | Przebiegi: ${runsCount}`;
+
+    if (st.last_results) {
+        const cnt = st.last_results.count ?? 0;
+        info += ` | Ost. wynik: ${cnt} wizyt (${formatTime(st.last_results.timestamp, true)})`;
+    }
+
+    if (st.twin_profile) {
+        info += ` | 👯 Tryb Bliźniak: ${getProfileDisplayLabel(st.twin_profile)}`;
+    }
+
+    detailsText.textContent = info;
+}
+
+function startSchedulerCountdown(nextRunIsoStr) {
+    if (!nextRunIsoStr) {
+        stopSchedulerCountdown();
+        return;
+    }
+
+    // Jeśli next_run się nie zmienił – nie restartuj interwału.
+    if (schedulerCountdownInterval && schedulerCountdownNextRunIso === nextRunIsoStr) {
+        return;
+    }
+
+    stopSchedulerCountdown();
+    schedulerCountdownNextRunIso = nextRunIsoStr;
+
+    schedulerCountdownInterval = setInterval(() => {
+        if (!state.schedulerStatus || !state.schedulerStatus.active) {
+            stopSchedulerCountdown();
+            return;
+        }
+        renderSchedulerDetails();
+    }, 1000);
+}
+
+function stopSchedulerCountdown() {
+    if (schedulerCountdownInterval) {
+        clearInterval(schedulerCountdownInterval);
+        schedulerCountdownInterval = null;
+    }
+    schedulerCountdownNextRunIso = null;
+}
+
+function formatTime(isoStr, includeSeconds = false) {
+    const d = parseUtcDate(isoStr);
+    if (!d || Number.isNaN(d.getTime())) return includeSeconds ? '--:--:--' : '--:--';
+
+    const opts = { hour: '2-digit', minute: '2-digit' };
+    if (includeSeconds) {
+        opts.second = '2-digit';
+    }
+
+    return d.toLocaleTimeString('pl-PL', opts);
 }
 
 function showToast(msg, type='info') {
