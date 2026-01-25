@@ -74,6 +74,7 @@ body {
     margin-bottom: 20px;
     box-shadow: 0 4px 6px var(--shadow);
     transition: transform 0.2s, box-shadow 0.2s;
+    overflow: hidden; /* Prevent content from overflowing panel */
 }
 
 .panel:hover {
@@ -116,6 +117,8 @@ body {
     font-size: 0.95rem;
     transition: all 0.2s;
     background: white;
+    width: 100%;
+    max-width: 100%;
 }
 
 .form-control:focus, input:focus, select:focus {
@@ -129,7 +132,7 @@ body {
 }
 
 .hour-input {
-    width: 70px;
+    width: 70px !important; /* Override width: 100% */
     text-align: center;
 }
 
@@ -144,6 +147,7 @@ body {
     transition: all 0.2s;
     display: inline-flex;
     align-items: center;
+    justify-content: center;
     gap: 8px;
     text-decoration: none;
 }
@@ -213,11 +217,12 @@ body {
 .custom-select-container {
     position: relative;
     width: 100%;
-    min-width: 200px;
+    min-width: 0; /* Allow shrinking below min content size */
 }
 
 .custom-select-trigger {
     width: 100%;
+    max-width: 100%;
     padding: 10px 14px;
     border: 2px solid var(--primary);
     background: linear-gradient(135deg, var(--primary) 0%, var(--primary-dark) 100%);
@@ -227,6 +232,9 @@ body {
     border-radius: 8px;
     font-weight: 500;
     transition: all 0.2s;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
 }
 
 .custom-select-trigger:hover {
@@ -246,6 +254,7 @@ body {
     display: none;
     box-shadow: 0 8px 24px var(--shadow-lg);
     overflow: hidden;
+    max-width: 100%; /* Ensure dropdown fits */
 }
 
 .custom-dropdown.open {
@@ -375,6 +384,8 @@ body {
     display: flex;
     flex-direction: column;
     gap: 6px;
+    width: 100%; /* Ensure item takes full width of grid cell */
+    min-width: 0; /* Allow flex item to shrink below content size */
 }
 
 .search-item label {
@@ -667,7 +678,7 @@ input[type="checkbox"] {
     }
 
     .search-grid {
-        grid-template-columns: 1fr;
+        grid-template-columns: 100%; /* Explicitly 100% on mobile */
     }
 
     .search-actions {
