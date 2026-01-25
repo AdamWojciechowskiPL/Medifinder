@@ -7,7 +7,7 @@ import logging
 import sys
 from typing import Optional, List, Dict, Any
 from pathlib import Path
-from datetime import date, datetime
+from datetime import date, datetime, time
 
 # Zredukowane, niezbędne importy
 from .config import Config
@@ -38,7 +38,8 @@ class MedicoverApp:
         self.config_dir = config_dir
         self._initialize_default_profile_and_client()
 
-    def _parse_appointment_date(self, apt: Dict[str, Any]) -> Optional[date]:
+    def _parse_appointment_date_dt(self, apt: Dict[str, Any]) -> Optional[datetime]:
+        """Parsuje datę wizyty do obiektu datetime (z obsługą timezone)."""
         s = apt.get('appointmentDate')
         if not s:
             return None
@@ -46,9 +47,62 @@ class MedicoverApp:
             # Obsłuż ISO z Z
             if isinstance(s, str) and s.endswith('Z'):
                 s = s.replace('Z', '+00:00')
-            return datetime.fromisoformat(s).date()
+            return datetime.fromisoformat(s)
         except Exception:
             return None
+
+    def _filter_results_by_preferences(self, appointments: List[Dict[str, Any]], 
+                                     preferred_days: List[int], 
+                                     time_range: Dict[str, str]) -> List[Dict[str, Any]]:
+        """
+        Filtruje wyniki na podstawie preferowanych dni tygodnia i zakresu godzin.
+        """
+        if not appointments:
+            return []
+            
+        # Jeśli brak filtrów, zwróć wszystko
+        if not preferred_days and not time_range:
+            return appointments
+
+        filtered: List[Dict[str, Any]] = []
+        
+        # Parsowanie zakresu godzin
+        start_time: Optional[time] = None
+        end_time: Optional[time] = None
+        
+        if time_range:
+            try:
+                if time_range.get('start'):
+                    # Obsługa formatu HH:MM lub HH:MM:SS
+                    parts = time_range['start'].split(':')
+                    start_time = time(int(parts[0]), int(parts[1]))
+                if time_range.get('end'):
+                    parts = time_range['end'].split(':')
+                    end_time = time(int(parts[0]), int(parts[1]))
+            except Exception as e:
+                self.logger.error(f"Błąd parsowania zakresu godzin {time_range}: {e}")
+
+        for apt in appointments:
+            dt = self._parse_appointment_date_dt(apt)
+            if not dt:
+                filtered.append(apt) # Fail-open
+                continue
+
+            # 1. Sprawdź dzień tygodnia (0=Pon, 6=Nd)
+            # Python weekday(): 0=Mon, 6=Sun. Zgadza się z formatem z frontendu.
+            if preferred_days and dt.weekday() not in preferred_days:
+                continue
+
+            # 2. Sprawdź godzinę
+            t = dt.time()
+            if start_time and t < start_time:
+                continue
+            if end_time and t > end_time:
+                continue
+
+            filtered.append(apt)
+
+        return filtered
 
     def _filter_results_by_date_range(self, appointments: List[Dict[str, Any]], start_date: Optional[str], end_date: Optional[str]) -> List[Dict[str, Any]]:
         if not appointments:
@@ -73,12 +127,13 @@ class MedicoverApp:
 
         filtered: List[Dict[str, Any]] = []
         for apt in appointments:
-            d = self._parse_appointment_date(apt)
-            if not d:
-                # Jeżeli nie umiemy sparsować daty, nie odrzucamy (fail-open)
+            # Używamy tej samej helper metody co wyżej, ale bierzemy tylko .date()
+            dt = self._parse_appointment_date_dt(apt)
+            if not dt:
                 filtered.append(apt)
                 continue
-
+            
+            d = dt.date()
             if start and d < start:
                 continue
             if end and d > end:
@@ -176,34 +231,38 @@ class MedicoverApp:
         
         try:
             temp_client = MedicoverClient(client_config)
-            # Logowanie
             if not temp_client.login(username, password):
                  self.logger.error("Logowanie nieudane")
                  return []
 
-            # Przygotowanie parametrów wyszukiwania
+            # Przygotowanie parametrów wyszukiwania API
             search_params: Dict[str, Any] = {}
             if kwargs.get('specialty_ids'): search_params['SpecialtyIds'] = kwargs['specialty_ids']
             if kwargs.get('doctor_ids'): search_params['DoctorIds'] = kwargs['doctor_ids']
             if kwargs.get('clinic_ids'): search_params['ClinicIds'] = kwargs['clinic_ids']
-
-            # NOWE: zakres dat z UI (backend scheduler + manual search)
+            
+            # Parametry dat
             start_date = kwargs.get('start_date')
             end_date = kwargs.get('end_date')
             if start_date:
-                # API medicover_api.py respektuje StartTime
                 search_params['StartTime'] = start_date
             if end_date:
-                # Nie wiemy czy API respektuje EndTime we wszystkich przypadkach,
-                # ale przekazujemy i dodatkowo filtrujemy wyniki po stronie backendu.
                 search_params['EndTime'] = end_date
             
+            # Wyszukiwanie w API
             found = temp_client.search_appointments(search_params)
             if not found:
                 return []
 
-            # Twarde filtrowanie po dacie (zabezpieczenie przed ignorowaniem parametrów przez API)
+            # --- FILTROWANIE WYNIKÓW ---
+            # 1. Filtrowanie po zakresie dat (serwerowy fallback)
             filtered = self._filter_results_by_date_range(found, start_date, end_date)
+            
+            # 2. Filtrowanie po preferencjach (dni tygodnia, godziny)
+            preferred_days = kwargs.get('preferred_days')
+            time_range = kwargs.get('time_range')
+            
+            filtered = self._filter_results_by_preferences(filtered, preferred_days, time_range)
 
             if filtered:
                 self._update_data_from_appointments(filtered)
@@ -261,7 +320,6 @@ class MedicoverApp:
             gui.run()
         except ImportError:
             print("GUI module not available in this environment")
-
 
 def main():
     """Główna funkcja aplikacji."""
