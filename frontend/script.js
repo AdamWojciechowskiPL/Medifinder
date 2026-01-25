@@ -131,6 +131,27 @@ function setSchedulerOptionsEnabled(enabled) {
     });
 }
 
+function pad2(val) {
+    const n = parseInt(val, 10);
+    if (!Number.isFinite(n)) return '';
+    return String(n).padStart(2, '0');
+}
+
+function applyTimeRangeToUI() {
+    const start = state.filters?.timeRange?.start;
+    const end = state.filters?.timeRange?.end;
+
+    const hourFromEl = document.getElementById('hourFrom');
+    const hourToEl = document.getElementById('hourTo');
+
+    if (hourFromEl && typeof start === 'string' && start.includes(':')) {
+        hourFromEl.value = pad2(start.split(':')[0]);
+    }
+    if (hourToEl && typeof end === 'string' && end.includes(':')) {
+        hourToEl.value = pad2(end.split(':')[0]);
+    }
+}
+
 // --- INIT ---
 document.addEventListener('DOMContentLoaded', async () => {
     checkAuthStatus();
@@ -298,6 +319,7 @@ function renderSpecialtiesSelect() {
         }
         updateFiltersFromUI();
         filterDoctorsBySpecialty();
+        saveState();
     };
 }
 
@@ -354,6 +376,7 @@ function renderDropdownList(items, containerId, filterKey) {
                 state.filters[filterKey] = state.filters[filterKey].filter(id => id !== val);
             }
             updateDropdownTriggerLabel(containerId.replace('List', 'Trigger'), state.filters[filterKey].length);
+            saveState();
         });
 
         container.appendChild(div);
@@ -388,6 +411,7 @@ function renderWeekdaysGrid() {
             } else {
                 state.filters.preferredDays = state.filters.preferredDays.filter(d => d !== index);
             }
+            saveState();
         };
         container.appendChild(div);
     });
@@ -431,6 +455,7 @@ function renderDayTimeRanges(days) {
             } else {
                 delete state.filters.dayTimeRanges[idx];
             }
+            saveState();
         };
 
         startIn.addEventListener('change', updateState);
@@ -460,6 +485,7 @@ function renderExcludedDates() {
             removeSpan.onclick = () => {
                 state.filters.excludedDates = state.filters.excludedDates.filter(d => d !== dateStr);
                 renderExcludedDates();
+                saveState();
             };
         }
 
@@ -706,6 +732,20 @@ function setupEventListeners() {
     // Search Button
     document.getElementById('searchBtn').addEventListener('click', handleSearch);
 
+    // Date/Time changes (persist immediately)
+    ['dateFrom', 'dateTo', 'hourFrom', 'hourTo'].forEach(id => {
+        const el = document.getElementById(id);
+        if (!el) return;
+        el.addEventListener('change', () => {
+            if (state.ui.filtersLocked) {
+                showToast(FILTERS_LOCKED_TOAST, 'info');
+                return;
+            }
+            updateFiltersFromUI();
+            saveState();
+        });
+    });
+
     // Scheduler Switch
     document.getElementById('enableAutoCheck').addEventListener('change', (e) => {
         if (e.target.checked) {
@@ -744,6 +784,7 @@ function setupEventListeners() {
         document.getElementById('specialtySelect').value = "";
         document.getElementById('dateFrom').value = state.filters.dateFrom;
         document.getElementById('dateTo').value = state.filters.dateTo;
+        applyTimeRangeToUI();
         document.getElementById('excludedDatesList').innerHTML = "";
 
         // Refresh
@@ -752,6 +793,8 @@ function setupEventListeners() {
         renderWeekdaysGrid();
         renderExcludedDates();
         renderProfilesList();
+
+        saveState();
     });
 
     // Advanced Filters Toggle
@@ -776,6 +819,7 @@ function setupEventListeners() {
             if (!state.filters.excludedDates.includes(inp.value)) {
                 state.filters.excludedDates.push(inp.value);
                 renderExcludedDates();
+                saveState();
             }
             inp.value = '';
         }
@@ -827,6 +871,7 @@ function clearSelection(listId) {
             container.querySelectorAll('input[type="checkbox"]').forEach(cb => cb.checked = false);
         }
         updateDropdownTriggerLabel(listId.replace('List', 'Trigger'), 0);
+        saveState();
     }
 }
 
@@ -887,9 +932,13 @@ document.getElementById('addProfileForm').addEventListener('submit', async (e) =
     }
 });
 
-// Save/Restore State (simplified)
+// Save/Restore State
 function saveState() {
-    localStorage.setItem('medifinder_last_filters', JSON.stringify(state.filters));
+    try {
+        localStorage.setItem('medifinder_last_filters', JSON.stringify(state.filters));
+    } catch (e) {
+        console.warn('LocalStorage save failed', e);
+    }
 }
 
 function restoreState() {
@@ -898,7 +947,9 @@ function restoreState() {
         try {
             const parsed = JSON.parse(saved);
             state.filters = { ...state.filters, ...parsed };
-        } catch (e) {}
+        } catch (e) {
+            console.warn('LocalStorage restore failed', e);
+        }
     }
 
     // Normalize stored ids (important when JSON contains strings)
@@ -919,8 +970,13 @@ function restoreState() {
     }
 
     // Apply to UI
-    if (document.getElementById('dateFrom')) document.getElementById('dateFrom').value = state.filters.dateFrom;
-    if (document.getElementById('dateTo')) document.getElementById('dateTo').value = state.filters.dateTo;
+    const dateFromEl = document.getElementById('dateFrom');
+    const dateToEl = document.getElementById('dateTo');
+    if (dateFromEl) dateFromEl.value = state.filters.dateFrom;
+    if (dateToEl) dateToEl.value = state.filters.dateTo;
+
+    // Apply time range to UI (hourFrom/hourTo)
+    applyTimeRangeToUI();
 
     // Restore other UI elements
     renderExcludedDates();
