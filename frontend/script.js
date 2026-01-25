@@ -33,6 +33,30 @@ const SEARCH_BTN_LABEL = '🔍 Wyszukaj';
 const SEARCH_BTN_DISABLED_LABEL = '🔍 Wyszukaj (wyłącz automat)';
 const FILTERS_LOCKED_TOAST = 'Wyłącz automat, aby zmienić filtry.';
 
+const FILTERS_STORAGE_PREFIX = 'medifinder_last_filters__';
+const LEGACY_FILTERS_KEY = 'medifinder_last_filters';
+
+function getDefaultFilters() {
+    return {
+        specialtyIds: [],
+        doctorIds: [],
+        clinicIds: [],
+        dateFrom: '',
+        dateTo: '',
+        timeRange: { start: '04:00', end: '22:00' },
+        preferredDays: [],
+        excludedDates: [],
+        dayTimeRanges: {}
+    };
+}
+
+function getFiltersStorageKey(profileName) {
+    const p = profileName || state.currentProfile;
+    if (!p) return null;
+    // Profile name comes from backend and is displayed in UI; keep it readable but unique.
+    return `${FILTERS_STORAGE_PREFIX}${encodeURIComponent(String(p))}`;
+}
+
 function normalizeIdArray(value) {
     if (!Array.isArray(value)) return [];
     return value
@@ -205,8 +229,8 @@ document.getElementById('authBtn').onclick = async () => {
 // --- APP LOGIC ---
 
 async function initializeApp() {
+    // loadProfiles() will auto-select a profile (if any) and selectProfile() handles restore per-profile.
     await loadProfiles();
-    restoreState();
 }
 
 async function loadProfiles() {
@@ -244,9 +268,19 @@ function populateTwinProfileSelect() {
 }
 
 function selectProfile(profileName) {
+    const prevProfile = state.currentProfile;
+    if (prevProfile && prevProfile !== profileName) {
+        // Persist filters of previous profile before switching.
+        saveState();
+    }
+
     state.currentProfile = profileName;
     document.getElementById('currentProfileLabel').textContent = profileName;
     document.getElementById('profilesModal').classList.add('hidden');
+
+    // Reset filters to defaults and restore per-profile state
+    state.filters = getDefaultFilters();
+    restoreState();
 
     // Refresh dictionaries for this profile
     loadDictionaries();
@@ -934,21 +968,42 @@ document.getElementById('addProfileForm').addEventListener('submit', async (e) =
 
 // Save/Restore State
 function saveState() {
+    const key = getFiltersStorageKey();
+    if (!key) return;
+
     try {
-        localStorage.setItem('medifinder_last_filters', JSON.stringify(state.filters));
+        localStorage.setItem(key, JSON.stringify(state.filters));
     } catch (e) {
-        console.warn('LocalStorage save failed', e);
+        console.warn('LocalStorage save failed', key, e);
     }
 }
 
 function restoreState() {
-    const saved = localStorage.getItem('medifinder_last_filters');
+    const key = getFiltersStorageKey();
+    if (!key) return;
+
+    let saved = localStorage.getItem(key);
+
+    // One-time migration from legacy single-key storage.
+    if (!saved) {
+        const legacy = localStorage.getItem(LEGACY_FILTERS_KEY);
+        if (legacy) {
+            saved = legacy;
+            try {
+                localStorage.setItem(key, legacy);
+                localStorage.removeItem(LEGACY_FILTERS_KEY);
+            } catch (e) {
+                // ignore
+            }
+        }
+    }
+
     if (saved) {
         try {
             const parsed = JSON.parse(saved);
             state.filters = { ...state.filters, ...parsed };
         } catch (e) {
-            console.warn('LocalStorage restore failed', e);
+            console.warn('LocalStorage restore failed', key, e);
         }
     }
 
