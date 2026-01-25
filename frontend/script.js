@@ -147,8 +147,8 @@ async function loadDictionaries() {
     const docJson = await docRes.json();
     if (docJson.success) {
         state.doctors = docJson.data;
-        renderDropdownList(state.doctors, 'doctorsList', 'doctorIds');
-        document.getElementById('doctorsCount').textContent = state.doctors.length;
+        // Apply filter initially in case filters were restored
+        filterDoctorsBySpecialty();
     }
 
     // Load Clinics
@@ -177,9 +177,37 @@ function renderSpecialtiesSelect() {
     
     // Restore selection if exists
     if (state.filters.specialtyIds.length > 0) {
-        // Simple check - in real app might need better matching
-        // select.value = JSON.stringify(state.filters.specialtyIds); 
+         const val = JSON.stringify(state.filters.specialtyIds);
+         for(let i=0; i<select.options.length; i++) {
+             if (select.options[i].value === val) {
+                 select.selectedIndex = i;
+                 break;
+             }
+         }
     }
+    
+    // Add change listener for doctor filtering
+    select.onchange = () => {
+        updateFiltersFromUI();
+        filterDoctorsBySpecialty();
+    };
+}
+
+function filterDoctorsBySpecialty() {
+    const selectedSpecIds = state.filters.specialtyIds || [];
+    let filtered = state.doctors;
+    
+    if (selectedSpecIds.length > 0) {
+        filtered = state.doctors.filter(d => {
+            // Check both snake_case and standard naming just in case
+            const docSpecs = d.specialty_ids || d.specialties;
+            if (!docSpecs) return true; // Keep if no data to filter by
+            return docSpecs.some(id => selectedSpecIds.includes(id));
+        });
+    }
+    
+    renderDropdownList(filtered, 'doctorsList', 'doctorIds');
+    document.getElementById('doctorsCount').textContent = filtered.length;
 }
 
 function renderDropdownList(items, containerId, filterKey) {
@@ -193,16 +221,28 @@ function renderDropdownList(items, containerId, filterKey) {
             <input type="checkbox" value="${item.id}" id="${filterKey}_${item.id}">
             <label for="${filterKey}_${item.id}">${item.name}</label>
         `;
+        
+        // Restore checked state
+        if (state.filters[filterKey].includes(parseInt(item.id))) {
+            div.querySelector('input').checked = true;
+        }
+
         div.querySelector('input').addEventListener('change', (e) => {
+            const val = parseInt(item.id);
             if (e.target.checked) {
-                state.filters[filterKey].push(parseInt(item.id));
+                if (!state.filters[filterKey].includes(val)) {
+                    state.filters[filterKey].push(val);
+                }
             } else {
-                state.filters[filterKey] = state.filters[filterKey].filter(id => id !== parseInt(item.id));
+                state.filters[filterKey] = state.filters[filterKey].filter(id => id !== val);
             }
             updateDropdownTriggerLabel(containerId.replace('List', 'Trigger'), state.filters[filterKey].length);
         });
         container.appendChild(div);
     });
+    
+    // Update label count initially
+    updateDropdownTriggerLabel(containerId.replace('List', 'Trigger'), state.filters[filterKey].length);
 }
 
 function renderWeekdaysGrid() {
@@ -213,6 +253,7 @@ function renderWeekdaysGrid() {
     days.forEach((day, index) => {
         const div = document.createElement('div');
         div.className = 'weekday-item';
+        if (state.filters.preferredDays.includes(index)) div.classList.add('selected');
         div.textContent = day;
         div.dataset.day = index;
         div.onclick = () => {
@@ -242,11 +283,13 @@ function renderDayTimeRanges(days) {
         row.style.justifyContent = 'space-between';
         row.style.fontSize = '0.85rem';
         
+        const saved = state.filters.dayTimeRanges[idx] || {};
+        
         row.innerHTML = `
             <span style="width: 30px; font-weight:500;">${dayName}</span>
-            <input type="time" class="form-control form-control-sm" style="width:80px" data-day="${idx}" data-type="start">
+            <input type="time" class="form-control form-control-sm" style="width:80px" data-day="${idx}" data-type="start" value="${saved.start || ''}">
             <span>-</span>
-            <input type="time" class="form-control form-control-sm" style="width:80px" data-day="${idx}" data-type="end">
+            <input type="time" class="form-control form-control-sm" style="width:80px" data-day="${idx}" data-type="end" value="${saved.end || ''}">
         `;
         
         // Add listeners
@@ -459,6 +502,8 @@ function updateFiltersFromUI() {
     const specVal = document.getElementById('specialtySelect').value;
     if (specVal) {
         state.filters.specialtyIds = JSON.parse(specVal);
+    } else {
+        state.filters.specialtyIds = [];
     }
     
     // Dates
@@ -516,11 +561,24 @@ function setupEventListeners() {
         state.filters.excludedDates = [];
         state.filters.dayTimeRanges = {};
         
+        // Reset defaults for dates
+        const now = new Date();
+        const tomorrow = new Date(now);
+        tomorrow.setDate(tomorrow.getDate() + 1);
+        state.filters.dateFrom = tomorrow.toISOString().split('T')[0];
+        const next30 = new Date(tomorrow);
+        next30.setDate(tomorrow.getDate() + 30);
+        state.filters.dateTo = next30.toISOString().split('T')[0];
+        
         // Reset UI
         document.querySelectorAll('input[type="checkbox"]').forEach(c => c.checked = false);
         document.getElementById('specialtySelect').value = "";
+        document.getElementById('dateFrom').value = state.filters.dateFrom;
+        document.getElementById('dateTo').value = state.filters.dateTo;
         document.getElementById('excludedDatesList').innerHTML = "";
+        
         // Refresh
+        filterDoctorsBySpecialty(); // Reset doctor filter
         renderProfilesList();
     });
 
@@ -631,11 +689,26 @@ function restoreState() {
         try {
             const parsed = JSON.parse(saved);
             state.filters = {...state.filters, ...parsed};
-            // Update UI inputs...
-            document.getElementById('dateFrom').value = state.filters.dateFrom;
-            document.getElementById('dateTo').value = state.filters.dateTo;
-            renderExcludedDates();
-            // Note: In full implementation, we'd restore all checkboxes here too
         } catch(e) {}
     }
+    
+    // --- NEW: Default Dates (Tomorrow to +30 days) ---
+    if (!state.filters.dateFrom || state.filters.dateFrom === '') {
+        const now = new Date();
+        const tomorrow = new Date(now);
+        tomorrow.setDate(tomorrow.getDate() + 1);
+        state.filters.dateFrom = tomorrow.toISOString().split('T')[0];
+        
+        const next30 = new Date(tomorrow);
+        next30.setDate(tomorrow.getDate() + 30);
+        state.filters.dateTo = next30.toISOString().split('T')[0];
+    }
+    // ------------------------------------------------
+
+    // Apply to UI
+    if(document.getElementById('dateFrom')) document.getElementById('dateFrom').value = state.filters.dateFrom;
+    if(document.getElementById('dateTo')) document.getElementById('dateTo').value = state.filters.dateTo;
+    
+    // Restore other UI elements
+    renderExcludedDates();
 }
