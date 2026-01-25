@@ -528,6 +528,34 @@ body {
     color: var(--dark);
 }
 
+.google-btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 12px;
+    padding: 12px 24px;
+    background: white;
+    border: 2px solid var(--border);
+    border-radius: 8px;
+    font-size: 1rem;
+    font-weight: 500;
+    color: var(--dark);
+    cursor: pointer;
+    transition: all 0.2s;
+    margin-top: 24px;
+}
+
+.google-btn:hover {
+    background: var(--light);
+    transform: translateY(-2px);
+    box-shadow: 0 4px 12px var(--shadow);
+}
+
+.google-btn img {
+    width: 24px;
+    height: 24px;
+}
+
 /* Modal */
 .modal {
     position: fixed;
