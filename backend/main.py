@@ -312,6 +312,29 @@ def scheduler_status():
         logger.error(f"Błąd pobierania statusu: {e}", exc_info=True)
         return jsonify({'success': False, 'error': str(e)}), 500
 
+@app.route('/api/v1/scheduler/results', methods=['GET'])
+@require_login
+def scheduler_results():
+    """Zwraca ostatnie wyniki wyszukiwania z schedulera."""
+    if not scheduler:
+        return jsonify({'success': False, 'error': 'Scheduler nie jest zainicjalizowany'}), 500
+    
+    user_email = get_current_user_email()
+    profile = request.args.get('profile')
+    
+    if not profile:
+        return jsonify({'success': False, 'error': 'Brak parametru profile'}), 400
+    
+    try:
+        results = scheduler.get_last_results(user_email, profile)
+        if results:
+            return jsonify({'success': True, 'data': results}), 200
+        else:
+            return jsonify({'success': True, 'data': None, 'message': 'Brak wyników'}), 200
+    except Exception as e:
+        logger.error(f"Błąd pobierania wyników: {e}", exc_info=True)
+        return jsonify({'success': False, 'error': str(e)}), 500
+
 # ======== PROFILES API =========
 
 @app.route('/api/v1/profiles', methods=['GET'])
