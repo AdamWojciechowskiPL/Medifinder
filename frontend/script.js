@@ -1,4 +1,3 @@
-
 // Medifinder - Appointment Finder
 const API_URL = '';
 const AUTH_URL = '/auth';
@@ -304,6 +303,11 @@ function renderSpecialties() {
 
 function handleSpecialtyChange() {
     const val = document.getElementById('specialtySelect').value;
+    
+    // --- VALIDATION ADDED: Enable/disable auto-check based on specialty ---
+    validateAutoCheckEnabled();
+    // --------------------------------------------------------------------
+    
     if (!val) {
         renderMultiSelect('doctorsList', allDoctors, selectedDoctors, 'doctor');
         return;
@@ -322,6 +326,28 @@ function handleSpecialtyChange() {
     
     renderMultiSelect('doctorsList', filteredDocs, selectedDoctors, 'doctor');
     updateTriggerLabel('doctorsTrigger', selectedDoctors, 'Lekarze');
+}
+
+// =========================
+// VALIDATION: Auto-check requires specialty
+// =========================
+function validateAutoCheckEnabled() {
+    const specVal = document.getElementById('specialtySelect').value;
+    const checkbox = document.getElementById('enableAutoCheck');
+    
+    if (!specVal) {
+        // No specialty selected - disable and uncheck
+        checkbox.disabled = true;
+        checkbox.checked = false;
+        
+        // Update status UI
+        const statusEl = document.getElementById('autoCheckStatus');
+        statusEl.textContent = 'Wyłączony (wybierz specjalność)';
+        statusEl.style.color = '#6b7280';
+    } else {
+        // Specialty selected - enable checkbox
+        checkbox.disabled = false;
+    }
 }
 
 function renderMultiSelect(elementId, items, selectionSet, type) {
@@ -428,6 +454,15 @@ async function toggleBackendScheduler() {
     const checkbox = document.getElementById('enableAutoCheck');
     const enabled = checkbox.checked;
     
+    // --- VALIDATION: Check specialty before starting ---
+    const specVal = document.getElementById('specialtySelect').value;
+    if (enabled && !specVal) {
+        showToast('Wybierz specjalność przed uruchomieniem schedulera', 'error');
+        checkbox.checked = false;
+        return;
+    }
+    // ---------------------------------------------------
+    
     if (enabled) {
         await startBackendScheduler();
     } else {
@@ -451,6 +486,15 @@ async function startBackendScheduler() {
     }
     
     const specVal = document.getElementById('specialtySelect').value;
+    
+    // --- VALIDATION ADDED ---
+    if (!specVal) {
+        showToast('Wybierz specjalność (wymagane)', 'error');
+        document.getElementById('enableAutoCheck').checked = false;
+        return;
+    }
+    // ------------------------
+    
     const preferredDays = Array.from(document.querySelectorAll('#weekdaysContainer input:checked'))
         .map(cb => parseInt(cb.value));
     const hFrom = document.getElementById('hourFrom').value.padStart(2, '0') + ":00";
@@ -611,6 +655,10 @@ async function checkSchedulerStatus() {
                 document.getElementById('autoCheckStatus').style.color = 'var(--dark)';
                 document.getElementById('schedulerDetailsRow').style.display = 'none';
             }
+            
+            // --- VALIDATION: Ensure checkbox follows specialty validation rules ---
+            validateAutoCheckEnabled();
+            // ---------------------------------------------------------------------
         }
     } catch (e) {
         console.error('Error checking scheduler status:', e);
