@@ -148,11 +148,12 @@ body {
     align-items: center;
     gap: 8px;
     width: 100%; /* Ensure ranges fit container */
+    flex-wrap: wrap; /* Allow wrapping on small screens */
 }
 
 .date-range input, .time-range input {
     flex: 1; /* Allow inputs to shrink/grow */
-    min-width: 0; /* Allow flex items to shrink below content size */
+    min-width: 120px; /* Give inputs a minimum width */
 }
 
 .time-range span, .date-range span {
@@ -180,6 +181,8 @@ body {
     transition: all 0.2s;
     min-width: 0; /* Prevent overflow */
     overflow: hidden;
+    text-overflow: ellipsis; /* Handle overflow text */
+    white-space: nowrap;
 }
 
 .weekday-item:hover {
@@ -594,6 +597,21 @@ input:checked + .slider:before { transform: translateX(20px); }
 
     .main-grid {
         grid-template-columns: 1fr;
+    }
+
+    /* Fix Date/Time ranges wrapping */
+    .date-range, .time-range {
+        flex-direction: column;
+        align-items: flex-start;
+        gap: 6px;
+    }
+    
+    .date-range input, .time-range input {
+        width: 100%;
+    }
+    
+    .time-range span, .date-range span {
+        align-self: center; /* Center separator */
     }
 
     .scheduler-bar {
