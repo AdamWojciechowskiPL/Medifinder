@@ -631,6 +631,22 @@ function filterDropdown(input, listId) {
     });
 }
 
+// NEW: Clear selection function for dropdowns
+function clearSelection(listId) {
+    let filterKey = '';
+    if (listId === 'doctorsList') filterKey = 'doctorIds';
+    if (listId === 'clinicsList') filterKey = 'clinicIds';
+    
+    if (filterKey) {
+        state.filters[filterKey] = [];
+        const container = document.getElementById(listId);
+        if (container) {
+            container.querySelectorAll('input[type="checkbox"]').forEach(cb => cb.checked = false);
+        }
+        updateDropdownTriggerLabel(listId.replace('List', 'Trigger'), 0);
+    }
+}
+
 function formatTime(isoStr) {
     if (!isoStr) return '--:--';
     return new Date(isoStr).toLocaleTimeString('pl-PL', {hour:'2-digit', minute:'2-digit'});
