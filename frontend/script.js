@@ -27,6 +27,13 @@ let state = {
 
 const API_BASE = '/api/v1';
 
+function normalizeIdArray(value) {
+    if (!Array.isArray(value)) return [];
+    return value
+        .map(v => parseInt(v, 10))
+        .filter(v => Number.isFinite(v));
+}
+
 // --- INIT ---
 document.addEventListener('DOMContentLoaded', async () => {
     checkAuthStatus();
@@ -194,14 +201,14 @@ function renderSpecialtiesSelect() {
 }
 
 function filterDoctorsBySpecialty() {
-    const selectedSpecIds = state.filters.specialtyIds || [];
+    const selectedSpecIds = normalizeIdArray(state.filters.specialtyIds || []);
     let filtered = state.doctors;
     
     if (selectedSpecIds.length > 0) {
         filtered = state.doctors.filter(d => {
-            // Check both snake_case and standard naming just in case
-            const docSpecs = d.specialty_ids || d.specialties;
-            if (!docSpecs) return true; // Keep if no data to filter by
+            const docSpecsRaw = d.specialty_ids ?? d.specialtyIds ?? d.specialties;
+            const docSpecs = normalizeIdArray(docSpecsRaw);
+            if (docSpecs.length === 0) return false;
             return docSpecs.some(id => selectedSpecIds.includes(id));
         });
     }
@@ -501,7 +508,7 @@ function updateFiltersFromUI() {
     // Specialty
     const specVal = document.getElementById('specialtySelect').value;
     if (specVal) {
-        state.filters.specialtyIds = JSON.parse(specVal);
+        state.filters.specialtyIds = normalizeIdArray(JSON.parse(specVal));
     } else {
         state.filters.specialtyIds = [];
     }
@@ -691,8 +698,13 @@ function restoreState() {
             state.filters = {...state.filters, ...parsed};
         } catch(e) {}
     }
-    
-    // --- NEW: Default Dates (Tomorrow to +30 days) ---
+
+    // Normalize stored ids (important when JSON contains strings)
+    state.filters.specialtyIds = normalizeIdArray(state.filters.specialtyIds);
+    state.filters.doctorIds = normalizeIdArray(state.filters.doctorIds);
+    state.filters.clinicIds = normalizeIdArray(state.filters.clinicIds);
+
+    // --- Default Dates (Tomorrow to +30 days) ---
     if (!state.filters.dateFrom || state.filters.dateFrom === '') {
         const now = new Date();
         const tomorrow = new Date(now);
@@ -703,7 +715,6 @@ function restoreState() {
         next30.setDate(tomorrow.getDate() + 30);
         state.filters.dateTo = next30.toISOString().split('T')[0];
     }
-    // ------------------------------------------------
 
     // Apply to UI
     if(document.getElementById('dateFrom')) document.getElementById('dateFrom').value = state.filters.dateFrom;
