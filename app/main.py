@@ -7,6 +7,8 @@ import logging
 import sys
 from typing import Optional, List, Dict, Any
 from pathlib import Path
+from datetime import date, datetime
+
 # Zredukowane, niezbędne importy
 from .config import Config
 from .profile_manager import ProfileManager
@@ -35,6 +37,55 @@ class MedicoverApp:
         self.current_profile: Optional[str] = None
         self.config_dir = config_dir
         self._initialize_default_profile_and_client()
+
+    def _parse_appointment_date(self, apt: Dict[str, Any]) -> Optional[date]:
+        s = apt.get('appointmentDate')
+        if not s:
+            return None
+        try:
+            # Obsłuż ISO z Z
+            if isinstance(s, str) and s.endswith('Z'):
+                s = s.replace('Z', '+00:00')
+            return datetime.fromisoformat(s).date()
+        except Exception:
+            return None
+
+    def _filter_results_by_date_range(self, appointments: List[Dict[str, Any]], start_date: Optional[str], end_date: Optional[str]) -> List[Dict[str, Any]]:
+        if not appointments:
+            return appointments
+
+        start = None
+        end = None
+        try:
+            if start_date:
+                start = date.fromisoformat(start_date)
+        except Exception:
+            self.logger.warning(f"Nieprawidłowy start_date: {start_date}")
+
+        try:
+            if end_date:
+                end = date.fromisoformat(end_date)
+        except Exception:
+            self.logger.warning(f"Nieprawidłowy end_date: {end_date}")
+
+        if not start and not end:
+            return appointments
+
+        filtered: List[Dict[str, Any]] = []
+        for apt in appointments:
+            d = self._parse_appointment_date(apt)
+            if not d:
+                # Jeżeli nie umiemy sparsować daty, nie odrzucamy (fail-open)
+                filtered.append(apt)
+                continue
+
+            if start and d < start:
+                continue
+            if end and d > end:
+                continue
+            filtered.append(apt)
+
+        return filtered
         
     def _update_data_from_appointments(self, appointments: List[Dict[str, Any]]) -> None:
         """
@@ -71,16 +122,13 @@ class MedicoverApp:
             format=log_config.get('format', '%(asctime)s - %(name)s - %(levelname)s - %(message)s'),
             handlers=[logging.StreamHandler(sys.stdout), logging.FileHandler('medicover_app.log', encoding='utf-8')]
         )
+
     def _initialize_default_profile_and_client(self) -> None:
         """
         Wczytuje domyślny profil, jeśli istnieje. Jeśli nie ma żadnych profili,
         aplikacja startuje bez aktywnego klienta.
         """
-        if self.profile_manager.profiles_path.exists(): # Sprawdzenie czy plik istnieje, bo user_profiles moze byc puste
-             # Tutaj logika może wymagać dostosowania do nowej struktury ProfileManager
-             # która używa user_email jako klucza. 
-             # W wersji webowej, kontekst użytkownika jest przekazywany dynamicznie,
-             # więc inicjalizacja "domyślnego" klienta może nie być potrzebna lub możliwa bez emaila.
+        if self.profile_manager.profiles_path.exists():
              pass
         else:
             self.logger.warning("Nie znaleziono pliku profili.")
@@ -90,7 +138,6 @@ class MedicoverApp:
         Przełącza aktywny profil i reinicjalizuje klienta Medicover.
         UWAGA: W wersji webowej ta metoda może być mniej używana, bo profil wybieramy per request.
         """
-        # Ta metoda wymagałaby user_email, którego tu nie mamy w kontekście globalnym
         self.logger.warning("switch_profile called without user context - legacy method")
         return False
 
@@ -133,24 +180,35 @@ class MedicoverApp:
             if not temp_client.login(username, password):
                  self.logger.error("Logowanie nieudane")
                  return []
-                 
-            # Przygotowanie parametrów wyszukiwania (mapowanie kwargs na format API)
-            search_params = {}
+
+            # Przygotowanie parametrów wyszukiwania
+            search_params: Dict[str, Any] = {}
             if kwargs.get('specialty_ids'): search_params['SpecialtyIds'] = kwargs['specialty_ids']
             if kwargs.get('doctor_ids'): search_params['DoctorIds'] = kwargs['doctor_ids']
             if kwargs.get('clinic_ids'): search_params['ClinicIds'] = kwargs['clinic_ids']
+
+            # NOWE: zakres dat z UI (backend scheduler + manual search)
+            start_date = kwargs.get('start_date')
+            end_date = kwargs.get('end_date')
+            if start_date:
+                # API medicover_api.py respektuje StartTime
+                search_params['StartTime'] = start_date
+            if end_date:
+                # Nie wiemy czy API respektuje EndTime we wszystkich przypadkach,
+                # ale przekazujemy i dodatkowo filtrujemy wyniki po stronie backendu.
+                search_params['EndTime'] = end_date
             
-            # Obsługa dat i godzin... (uproszczona)
-            # Tutaj normalnie byłaby logika konwersji time_range itp.
-            # Zakładamy, że MedicoverClient radzi sobie z podstawowymi parametrami
-            
-            # Wywołanie search_appointments w kliencie
             found = temp_client.search_appointments(search_params)
-            
-            if found:
-                self._update_data_from_appointments(found)
-                return found
-            return []
+            if not found:
+                return []
+
+            # Twarde filtrowanie po dacie (zabezpieczenie przed ignorowaniem parametrów przez API)
+            filtered = self._filter_results_by_date_range(found, start_date, end_date)
+
+            if filtered:
+                self._update_data_from_appointments(filtered)
+
+            return filtered
             
         except Exception as e:
             self.logger.error(f"Błąd podczas wyszukiwania: {e}", exc_info=True)
@@ -178,10 +236,6 @@ class MedicoverApp:
             if not temp_client.login(username, password):
                  return {"success": False, "message": "Błąd logowania"}
             
-            # Konstruujemy obiekt wizyty zgodny z oczekiwaniami MedicoverClient
-            # Kluczowe jest pole 'bookingString'.
-            # appointment_id jest zachowany dla kompatybilności wstecznej, ale API wymaga stringa.
-            
             appointment_obj = {}
             if booking_string:
                 appointment_obj["bookingString"] = booking_string
@@ -201,13 +255,13 @@ class MedicoverApp:
     def run_gui(self):
         """Tworzy i uruchamia interfejs graficzny."""
         print("🚀 Uruchamianie interfejsu graficznego...")
-        # Przekazujemy 'self' (czyli całą instancję app) oraz ścieżkę do konfiguracji
         try:
             from gui import MedicoverGUI
             gui = MedicoverGUI(self, self.config_dir)
             gui.run()
         except ImportError:
             print("GUI module not available in this environment")
+
 
 def main():
     """Główna funkcja aplikacji."""
