@@ -1,3 +1,4 @@
+
 // Medifinder - Appointment Finder
 const API_URL = '';
 const AUTH_URL = '/auth';
@@ -126,9 +127,12 @@ async function loadProfiles() {
             profiles = data.data;
             currentProfile = profiles[0]; // Default to first
             updateProfileUI();
-            loadDictionaries();
+            
+            // Ładowanie słowników i przywracanie stanu
+            await loadDictionaries();
             
             // Załaduj ostatnie wyniki schedulera i sprawdź status
+            // checkSchedulerStatus może nadpisać stan UI schedulera, ale nie searchResults chyba że user chce
             await loadLastSchedulerResults();
             await checkSchedulerStatus();
         } else {
@@ -155,8 +159,66 @@ async function loadDictionaries() {
         const clinicData = await clinicResp.json();
         allClinics = clinicData.data || [];
         renderMultiSelect('clinicsList', allClinics, selectedClinics, 'clinic');
+        
+        // --- RESTORE STATE AFTER DICTIONARIES LOADED ---
+        restoreLastSearch();
+
     } catch (e) {
         console.error("Error loading dictionaries:", e);
+    }
+}
+
+// =========================
+// STATE PERSISTENCE
+// =========================
+function restoreLastSearch() {
+    const saved = localStorage.getItem('medifinder_last_search');
+    if (!saved) return;
+    
+    try {
+        const state = JSON.parse(saved);
+        
+        // Restore Specialty
+        if (state.specialty) {
+            const sel = document.getElementById('specialtySelect');
+            if (sel) {
+                // Sprawdź czy taka specjalność istnieje w załadowanych
+                const exists = allSpecialties.some(s => s.ids.join(',') === state.specialty);
+                if (exists) {
+                    sel.value = state.specialty;
+                }
+            }
+        }
+        
+        // Restore Doctors Selection
+        if (state.doctors && Array.isArray(state.doctors)) {
+            selectedDoctors = new Set(state.doctors);
+        }
+        
+        // Restore Clinics Selection
+        if (state.clinics && Array.isArray(state.clinics)) {
+            selectedClinics = new Set(state.clinics);
+        }
+        
+        // Apply filters (filters doctors based on specialty AND selectedDoctors)
+        handleSpecialtyChange(); 
+        
+        // Re-render clinics to show selection
+        renderMultiSelect('clinicsList', allClinics, selectedClinics, 'clinic');
+
+        // Restore Results (if any)
+        if (state.results && Array.isArray(state.results) && state.results.length > 0) {
+            searchResults = state.results;
+            renderResults();
+            const sourceEl = document.getElementById('resultsSource');
+            if (sourceEl) {
+                const date = new Date(state.timestamp);
+                sourceEl.innerHTML = `💾 Ostatnie wyszukiwanie (${date.toLocaleTimeString()})`;
+            }
+        }
+        
+    } catch (e) {
+        console.error("Error restoring state", e);
     }
 }
 
@@ -166,6 +228,13 @@ async function loadDictionaries() {
 async function loadLastSchedulerResults() {
     if (!currentProfile) return;
     
+    // Jeśli mamy już wyniki z localStorage (przywrócone), nie nadpisuj ich pustym schedulerem
+    // Ale jeśli scheduler ma nowsze wyniki? 
+    // Na razie zostawmy priorytet dla manualnego wyszukiwania usera jeśli zostało przywrócone.
+    // Jeśli searchResults jest puste, spróbuj załadować z schedulera.
+    
+    if (searchResults.length > 0) return;
+
     try {
         const resp = await fetch(`${API_URL}/api/v1/scheduler/results?profile=${currentProfile}`, {
             credentials: 'include'
@@ -174,7 +243,7 @@ async function loadLastSchedulerResults() {
         
         if (data.success && data.data && data.data.appointments) {
             const results = data.data;
-            console.log(`📊 Załadowano ${results.count} ostatnich wyników z ${results.timestamp}`);
+            // console.log(`📊 Załadowano ${results.count} ostatnich wyników z ${results.timestamp}`);
             
             // Renderuj wyniki
             searchResults = results.appointments;
@@ -218,6 +287,10 @@ function switchProfile(name) {
     loadDictionaries();
     
     // Załaduj dane dla nowego profilu
+    // Clear current results
+    searchResults = [];
+    renderResults();
+    
     loadLastSchedulerResults();
     checkSchedulerStatus();
 }
@@ -241,7 +314,10 @@ function handleSpecialtyChange() {
         d.specialty_ids.some(sid => specIds.includes(sid))
     );
     
+    // Filter selection to only valid doctors for this specialty
     const validIds = new Set(filteredDocs.map(d => d.id));
+    // Important: We want to keep selected doctors IF they are in the new valid list
+    // BUT when restoring from state, selectedDoctors might contain IDs that are valid.
     selectedDoctors = new Set([...selectedDoctors].filter(id => validIds.has(id)));
     
     renderMultiSelect('doctorsList', filteredDocs, selectedDoctors, 'doctor');
@@ -621,6 +697,13 @@ async function searchAppointments(isBackground = false) {
     }
 
     const specVal = document.getElementById('specialtySelect').value;
+    // --- VALIDATION ADDED ---
+    if (!specVal) {
+        if (!isBackground) showToast('Wybierz specjalność (wymagane)', 'error');
+        return [];
+    }
+    // ------------------------
+
     const preferredDays = Array.from(document.querySelectorAll('#weekdaysContainer input:checked'))
         .map(cb => parseInt(cb.value));
     const hFrom = document.getElementById('hourFrom').value.padStart(2, '0') + ":00";
@@ -660,6 +743,19 @@ async function searchAppointments(isBackground = false) {
             if (sourceEl) sourceEl.innerHTML = '';
             
             if (!isBackground) showToast(`✅ Znaleziono: ${searchResults.length} wizyt`, 'success');
+
+            // --- SAVE STATE ADDED ---
+            const state = {
+                profile: currentProfile,
+                specialty: specVal,
+                doctors: Array.from(selectedDoctors),
+                clinics: Array.from(selectedClinics),
+                results: searchResults,
+                timestamp: new Date().getTime()
+            };
+            localStorage.setItem('medifinder_last_search', JSON.stringify(state));
+            // ------------------------
+
             return searchResults;
         } else {
             if (!isBackground) showToast('Błąd: ' + (data.error || data.message), 'error');
@@ -818,6 +914,9 @@ function resetFilters() {
     document.querySelectorAll('#weekdaysContainer input').forEach(cb => cb.checked = true);
     if (document.getElementById('hourFrom')) document.getElementById('hourFrom').value = 4;
     if (document.getElementById('hourTo')) document.getElementById('hourTo').value = 19;
+    
+    // Clear storage on reset? Or keep it? Usually reset means reset UI.
+    // I won't clear localStorage here, user might want to clear filters but not lose history until next search.
     
     showToast('Filtry wyczyszczone', 'success');
 }
