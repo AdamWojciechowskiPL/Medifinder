@@ -1,4 +1,4 @@
-// Medifinder Web - Backend Scheduler Integration
+// Medifinder - Appointment Finder
 const API_URL = '';
 const AUTH_URL = '/auth';
 
@@ -15,6 +15,44 @@ let searchResults = [];
 // Status polling interval
 let statusPollingInterval = null;
 let resultsPollingInterval = null;
+
+// =========================
+// UTILITY: UTC TO LOCAL TIME CONVERSION
+// =========================
+function utcToLocal(utcDateString) {
+    if (!utcDateString) return null;
+    
+    // Parse UTC date and convert to local timezone
+    const date = new Date(utcDateString);
+    return date;
+}
+
+function formatLocalDateTime(utcDateString) {
+    const date = utcToLocal(utcDateString);
+    if (!date || isNaN(date)) return 'Nieznana data';
+    
+    return date.toLocaleString('pl-PL', {
+        day: '2-digit',
+        month: '2-digit',
+        year: 'numeric',
+        hour: '2-digit',
+        minute: '2-digit'
+    });
+}
+
+function formatLocalDate(utcDateString) {
+    const date = utcToLocal(utcDateString);
+    if (!date || isNaN(date)) return 'Błąd daty';
+    
+    return date.toLocaleDateString('pl-PL');
+}
+
+function formatLocalTime(utcDateString) {
+    const date = utcToLocal(utcDateString);
+    if (!date || isNaN(date)) return '--:--';
+    
+    return date.toLocaleTimeString('pl-PL', {hour:'2-digit', minute:'2-digit'});
+}
 
 // =========================
 // INIT & AUTH
@@ -75,7 +113,7 @@ async function loadProfiles() {
             updateProfileUI();
             loadDictionaries();
             
-            // NOWE: Załaduj ostatnie wyniki schedulera i sprawdź status
+            // Załaduj ostatnie wyniki schedulera i sprawdź status
             await loadLastSchedulerResults();
             await checkSchedulerStatus();
         } else {
@@ -108,7 +146,7 @@ async function loadDictionaries() {
 }
 
 // =========================
-// NOWE: ŁADOWANIE OSTATNICH WYNIKÓW SCHEDULERA
+// ŁADOWANIE OSTATNICH WYNIKÓW SCHEDULERA
 // =========================
 async function loadLastSchedulerResults() {
     if (!currentProfile) return;
@@ -127,15 +165,8 @@ async function loadLastSchedulerResults() {
             searchResults = results.appointments;
             renderResults();
             
-            // Pokaż info o źródle wyników
-            const timestamp = new Date(results.timestamp);
-            const timeStr = timestamp.toLocaleString('pl-PL', {
-                day: '2-digit',
-                month: '2-digit',
-                year: 'numeric',
-                hour: '2-digit',
-                minute: '2-digit'
-            });
+            // Pokaż info o źródle wyników (KONWERSJA UTC -> LOCAL)
+            const timeStr = formatLocalDateTime(results.timestamp);
             
             const sourceEl = document.getElementById('resultsSource');
             if (sourceEl) {
@@ -157,9 +188,9 @@ function updateProfileUI() {
     const list = document.getElementById('profilesList');
     if (list) {
         list.innerHTML = profiles.map(p => 
-            `<div style="display:flex; justify-content:space-between; margin-bottom:5px;">
-                <span>${p}</span>
-                <button class="btn btn-sm" onclick="switchProfile('${p}')">Wybierz</button>
+            `<div style="display:flex; justify-content:space-between; margin-bottom:12px; padding: 12px; background: var(--light); border-radius: 8px;">
+                <span style="font-weight: 500;">${p}</span>
+                <button class="btn btn-sm btn-primary" onclick="switchProfile('${p}')">Wybierz</button>
              </div>`
         ).join('');
     }
@@ -179,7 +210,7 @@ function switchProfile(name) {
 function renderSpecialties() {
     const sel = document.getElementById('specialtySelect');
     if (!sel) return;
-    sel.innerHTML = '<option value="">-- Wybierz --</option>' + 
+    sel.innerHTML = '<option value="">-- Wybierz specjalność --</option>' + 
         allSpecialties.map(s => `<option value="${s.ids.join(',')}">${s.name}</option>`).join('');
 }
 
@@ -242,7 +273,7 @@ function updateTriggerLabel(elementId, set, baseLabel) {
     if (!btn) return;
     
     if (count === 0) btn.textContent = "Wybierz...";
-    else btn.textContent = `${count} zaznaczonych`;
+    else btn.textContent = `✅ ${count} zaznaczonych`;
 }
 
 function clearSelection(listId) {
@@ -359,25 +390,22 @@ async function startBackendScheduler() {
         const data = await resp.json();
         
         if (data.success) {
-            showToast(`✅ Zadanie uruchomione (co ${intervalMin} min)`, 'success');
+            showToast(`✅ Scheduler uruchomiony (co ${intervalMin} min)`, 'success');
             
             // Update UI
             document.getElementById('enableAutoCheck').checked = true;
             const statusEl = document.getElementById('autoCheckStatus');
-            statusEl.textContent = `Włączone (co ${intervalMin} min)`;
-            statusEl.style.color = 'green';
-            statusEl.style.fontWeight = 'bold';
+            statusEl.textContent = `Aktywny (co ${intervalMin} min)`;
+            statusEl.style.color = 'var(--success)';
             
             // Update auto-book status
             const autoBookStatusEl = document.getElementById('autoBookStatus');
             if (autoBook) {
                 autoBookStatusEl.textContent = 'Włączona';
-                autoBookStatusEl.style.color = 'green';
-                autoBookStatusEl.style.fontWeight = 'bold';
+                autoBookStatusEl.style.color = 'var(--success)';
             } else {
                 autoBookStatusEl.textContent = 'Wyłączona';
-                autoBookStatusEl.style.color = 'black';
-                autoBookStatusEl.style.fontWeight = 'normal';
+                autoBookStatusEl.style.color = 'var(--dark)';
             }
             
             // Start polling for status updates
@@ -408,14 +436,13 @@ async function stopBackendScheduler() {
         const data = await resp.json();
         
         if (data.success) {
-            showToast('Zadanie zatrzymane', 'success');
+            showToast('Scheduler zatrzymany', 'success');
             
             // Update UI
             document.getElementById('enableAutoCheck').checked = false;
             const statusEl = document.getElementById('autoCheckStatus');
-            statusEl.textContent = 'Wyłączone';
-            statusEl.style.color = 'black';
-            statusEl.style.fontWeight = 'normal';
+            statusEl.textContent = 'Wyłączony';
+            statusEl.style.color = 'var(--dark)';
             
             // Hide details
             document.getElementById('schedulerDetailsRow').style.display = 'none';
@@ -466,21 +493,19 @@ async function checkSchedulerStatus() {
                         statusEl.textContent = 'Sprawdzanie...';
                     }
                 } else {
-                    statusEl.textContent = `Włączone (co ${intervalMin} min)`;
+                    statusEl.textContent = `Aktywny (co ${intervalMin} min)`;
                 }
                 
-                statusEl.style.color = 'green';
-                statusEl.style.fontWeight = 'bold';
+                statusEl.style.color = 'var(--success)';
                 
-                // NOWE: Pokaż szczegółowy status
+                // Pokaż szczegółowy status
                 updateSchedulerDetails(status);
                 
                 // Update auto-book status
                 const autoBookStatusEl = document.getElementById('autoBookStatus');
                 if (status.auto_book) {
                     autoBookStatusEl.textContent = 'Włączona';
-                    autoBookStatusEl.style.color = 'green';
-                    autoBookStatusEl.style.fontWeight = 'bold';
+                    autoBookStatusEl.style.color = 'var(--success)';
                 }
                 
                 // Start polling if not already running
@@ -491,9 +516,8 @@ async function checkSchedulerStatus() {
             } else {
                 // Inactive
                 document.getElementById('enableAutoCheck').checked = false;
-                document.getElementById('autoCheckStatus').textContent = 'Wyłączone';
-                document.getElementById('autoCheckStatus').style.color = 'black';
-                document.getElementById('autoCheckStatus').style.fontWeight = 'normal';
+                document.getElementById('autoCheckStatus').textContent = 'Wyłączony';
+                document.getElementById('autoCheckStatus').style.color = 'var(--dark)';
                 document.getElementById('schedulerDetailsRow').style.display = 'none';
             }
         }
@@ -508,45 +532,29 @@ function updateSchedulerDetails(status) {
     
     if (!detailsRow || !detailsEl) return;
     
-    let html = '<div style="display: flex; flex-direction: column; gap: 3px;">';
+    let html = '<div style="display: flex; flex-direction: column; gap: 6px;">';
     
-    // Ostatnie sprawdzenie
+    // Ostatnie sprawdzenie (KONWERSJA UTC -> LOCAL)
     if (status.last_run) {
-        const lastRun = new Date(status.last_run);
-        const timeStr = lastRun.toLocaleString('pl-PL', {
-            day: '2-digit',
-            month: '2-digit',
-            hour: '2-digit',
-            minute: '2-digit'
-        });
-        html += `<span>🕒 Ostatnie: ${timeStr}</span>`;
+        const timeStr = formatLocalDateTime(status.last_run);
+        html += `<span>🕒 Ostatnie sprawdzenie: ${timeStr}</span>`;
     }
     
     // Liczba wykonań
     if (status.runs_count !== undefined) {
-        html += `<span>🔢 Wykonań: ${status.runs_count}</span>`;
+        html += `<span>🔢 Liczba wykonań: ${status.runs_count}</span>`;
     }
     
-    // Ostatnie wyniki
+    // Ostatnie wyniki (KONWERSJA UTC -> LOCAL)
     if (status.last_results) {
-        const resTime = new Date(status.last_results.timestamp);
-        const resTimeStr = resTime.toLocaleString('pl-PL', {
-            day: '2-digit',
-            month: '2-digit',
-            hour: '2-digit',
-            minute: '2-digit'
-        });
+        const resTimeStr = formatLocalDateTime(status.last_results.timestamp);
         html += `<span>📊 Ostatnie wyniki: ${status.last_results.count} wizyt (${resTimeStr})</span>`;
     }
     
-    // Ostatni błąd
+    // Ostatni błąd (KONWERSJA UTC -> LOCAL)
     if (status.last_error) {
-        const errTime = new Date(status.last_error.timestamp);
-        const errTimeStr = errTime.toLocaleTimeString('pl-PL', {
-            hour: '2-digit',
-            minute: '2-digit'
-        });
-        html += `<span style="color: #dc3545;">⚠️ Błąd: ${status.last_error.error.substring(0, 50)} (${errTimeStr})</span>`;
+        const errTimeStr = formatLocalTime(status.last_error.timestamp);
+        html += `<span style="color: var(--danger);">⚠️ Błąd: ${status.last_error.error.substring(0, 60)} (${errTimeStr})</span>`;
     }
     
     html += '</div>';
@@ -593,7 +601,7 @@ function stopResultsPolling() {
 
 async function searchAppointments(isBackground = false) {
     if (!currentProfile) { 
-        if (!isBackground) showToast('Brak wybranego profilu', 'error'); 
+        if (!isBackground) showToast('Wybierz profil przed wyszukiwaniem', 'error'); 
         return []; 
     }
 
@@ -615,7 +623,7 @@ async function searchAppointments(isBackground = false) {
 
     const btn = document.getElementById('searchBtn');
     if (!isBackground) {
-        btn.textContent = 'Szukam...';
+        btn.textContent = '🔍 Szukam...';
         btn.disabled = true;
     }
 
@@ -636,19 +644,19 @@ async function searchAppointments(isBackground = false) {
             const sourceEl = document.getElementById('resultsSource');
             if (sourceEl) sourceEl.innerHTML = '';
             
-            if (!isBackground) showToast(`Znaleziono: ${searchResults.length}`, 'success');
+            if (!isBackground) showToast(`✅ Znaleziono: ${searchResults.length} wizyt`, 'success');
             return searchResults;
         } else {
             if (!isBackground) showToast('Błąd: ' + (data.error || data.message), 'error');
             return [];
         }
     } catch (e) {
-        if (!isBackground) showToast('Błąd połączenia', 'error');
+        if (!isBackground) showToast('Błąd połączenia z serwerem', 'error');
         console.error(e);
         return [];
     } finally {
         if (!isBackground) {
-            btn.textContent = 'Wyszukaj';
+            btn.textContent = '🔍 Wyszukaj';
             btn.disabled = false;
         }
     }
@@ -660,21 +668,20 @@ function renderResults() {
     tbody.innerHTML = '';
     
     if (searchResults.length === 0) {
-        tbody.innerHTML = '<tr><td colspan="5" style="text-align:center;">Brak wyników</td></tr>';
+        tbody.innerHTML = `<tr>
+            <td colspan="5" style="text-align:center; padding: 40px; color: #6b7280;">
+                <div style="font-size: 3rem; margin-bottom: 16px;">🔍</div>
+                <div style="font-size: 1.1rem; font-weight: 500;">Brak wyników</div>
+                <div style="font-size: 0.9rem; margin-top: 8px;">Użyj wyszukiwania lub włącz scheduler</div>
+            </td>
+        </tr>`;
         return;
     }
 
     searchResults.forEach((apt, index) => {
-        let dateObj = null;
-        const datetime_str = apt.appointmentDate || ""; 
-        
-        if (datetime_str) {
-             const clean_str = datetime_str.replace('Z', '+00:00');
-             dateObj = new Date(clean_str);
-        }
-
-        const dateStr = (dateObj && !isNaN(dateObj)) ? dateObj.toLocaleDateString('pl-PL') : 'Błąd daty';
-        const timeStr = (dateObj && !isNaN(dateObj)) ? dateObj.toLocaleTimeString('pl-PL', {hour:'2-digit', minute:'2-digit'}) : '--:--';
+        // Użyj funkcji konwersji UTC -> LOCAL
+        const dateStr = formatLocalDate(apt.appointmentDate);
+        const timeStr = formatLocalTime(apt.appointmentDate);
         
         const doctorName = apt.doctor && apt.doctor.name ? apt.doctor.name : "Nieznany lekarz";
         const specialtyName = apt.specialty && apt.specialty.name ? apt.specialty.name : "Nieznana specjalność";
@@ -684,7 +691,7 @@ function renderResults() {
         tr.onclick = () => selectRow(tr, apt);
         tr.innerHTML = `
             <td>${dateStr}</td>
-            <td>${timeStr}</td>
+            <td><strong>${timeStr}</strong></td>
             <td>${doctorName}</td>
             <td>${specialtyName}</td>
             <td>${clinicName}</td>
@@ -710,14 +717,7 @@ async function bookSelected() {
 
 async function performBooking(appointment, silent = false) {
     const docName = appointment.doctor && appointment.doctor.name ? appointment.doctor.name : "Nieznany";
-    
-    let dateObj = null;
-    const datetime_str = appointment.appointmentDate || "";
-    if (datetime_str) {
-         const clean_str = datetime_str.replace('Z', '+00:00');
-         dateObj = new Date(clean_str);
-    }
-    const dateVal = (dateObj && !isNaN(dateObj)) ? dateObj.toLocaleString('pl-PL') : "Nieznana data";
+    const dateVal = formatLocalDateTime(appointment.appointmentDate);
 
     if (!silent) {
         if (!confirm(`Czy na pewno chcesz zarezerwować wizytę?\n\nLekarz: ${docName}\nData: ${dateVal}`)) return false;
@@ -727,7 +727,7 @@ async function performBooking(appointment, silent = false) {
     const aptId = appointment.appointmentId || appointment.id;
 
     if (!bookingString) {
-        if (!silent) showToast('Błąd: Brak bookingString', 'error');
+        if (!silent) showToast('Błąd: Brak danych rezerwacji', 'error');
         return false;
     }
 
@@ -744,7 +744,7 @@ async function performBooking(appointment, silent = false) {
         });
         const data = await resp.json();
         if (data.success) {
-            if (!silent) showToast('Zarezerwowano pomyślnie!', 'success');
+            if (!silent) showToast('✅ Wizyta zarezerwowana pomyślnie!', 'success');
             searchResults = searchResults.filter(a => a !== appointment);
             renderResults();
             selectedAppointment = null;
@@ -762,19 +762,15 @@ async function performBooking(appointment, silent = false) {
 }
 
 function exportResults() {
-    if (searchResults.length === 0) { showToast('Brak danych do eksportu', 'error'); return; }
+    if (searchResults.length === 0) { 
+        showToast('Brak danych do eksportu', 'error'); 
+        return; 
+    }
     
     let csvContent = "Data,Godzina,Lekarz,Specjalnosc,Placowka\n";
     searchResults.forEach(row => {
-        let dateObj = null;
-        const datetime_str = row.appointmentDate || "";
-        if (datetime_str) {
-             const clean_str = datetime_str.replace('Z', '+00:00');
-             dateObj = new Date(clean_str);
-        }
-
-        const date = (dateObj && !isNaN(dateObj)) ? dateObj.toLocaleDateString() : "";
-        const time = (dateObj && !isNaN(dateObj)) ? dateObj.toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'}) : "";
+        const date = formatLocalDate(row.appointmentDate);
+        const time = formatLocalTime(row.appointmentDate);
         
         const doc = row.doctor && row.doctor.name ? row.doctor.name : "";
         const spec = row.specialty && row.specialty.name ? row.specialty.name : "";
@@ -787,10 +783,12 @@ function exportResults() {
     const link = document.createElement("a");
     const url = URL.createObjectURL(blob);
     link.setAttribute("href", url);
-    link.setAttribute("download", "wyniki_medifinder.csv");
+    link.setAttribute("download", "medifinder_wyniki.csv");
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
+    
+    showToast('✅ Wyniki wyeksportowane do CSV', 'success');
 }
 
 function resetFilters() {
@@ -805,6 +803,8 @@ function resetFilters() {
     document.querySelectorAll('#weekdaysContainer input').forEach(cb => cb.checked = true);
     if (document.getElementById('hourFrom')) document.getElementById('hourFrom').value = 4;
     if (document.getElementById('hourTo')) document.getElementById('hourTo').value = 19;
+    
+    showToast('Filtry wyczyszczone', 'success');
 }
 
 // =========================
@@ -815,8 +815,8 @@ function showToast(msg, type) {
     if (!t) return;
     t.textContent = msg;
     t.className = `toast show`;
-    t.style.backgroundColor = type === 'error' ? '#dc3545' : '#28a745';
-    setTimeout(() => t.classList.remove('show'), 3000);
+    t.style.backgroundColor = type === 'error' ? 'var(--danger)' : 'var(--success)';
+    setTimeout(() => t.classList.remove('show'), 3500);
 }
 
 function toggleProfilesModal() {
@@ -849,7 +849,7 @@ if (addProfForm) {
             });
             const data = await resp.json();
             if (data.success) {
-                showToast('Profil dodany', 'success');
+                showToast('✅ Profil dodany pomyślnie', 'success');
                 loadProfiles();
                 e.target.reset();
             } else {
@@ -857,7 +857,7 @@ if (addProfForm) {
             }
         } catch (e) {
             console.error(e);
-            showToast('Błąd połączenia', 'error');
+            showToast('Błąd połączenia z serwerem', 'error');
         }
     });
 }
