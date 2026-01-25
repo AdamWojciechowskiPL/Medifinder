@@ -685,6 +685,11 @@ input[type="checkbox"] {
         padding: 20px;
     }
 
+    .header-right {
+        flex-direction: column;
+        width: 100%;
+    }
+
     .header h1 {
         font-size: 1.5rem;
     }
@@ -752,6 +757,12 @@ input[type="checkbox"] {
     .results-table th,
     .results-table td {
         padding: 10px 8px;
+    }
+    
+    #userLabel {
+        word-break: break-all;
+        text-align: center;
+        font-size: 0.9rem;
     }
 }
 
