@@ -6,7 +6,7 @@
 // Global State
 let state = {
     profiles: [],
-    currentProfile: null,
+    currentProfile: null, // profile login (card number)
     specialties: [],
     doctors: [],
     clinics: [],
@@ -52,17 +52,60 @@ function getDefaultFilters() {
     };
 }
 
-function getFiltersStorageKey(profileName) {
-    const p = profileName || state.currentProfile;
+function normalizeProfilesList(raw) {
+    if (!Array.isArray(raw)) return [];
+
+    const mapped = raw.map(p => {
+        // Legacy: backend used to return array of strings
+        if (typeof p === 'string') {
+            const login = String(p);
+            return { login, name: login, is_child: false };
+        }
+
+        if (!p || typeof p !== 'object') return null;
+
+        const login = p.login ?? p.username ?? '';
+        const name = (p.name ?? p.description ?? '').trim();
+        const isChild = Boolean(p.is_child ?? p.isChild ?? p.is_child_account ?? p.isChildAccount ?? false);
+
+        if (!login) return null;
+        return {
+            login: String(login),
+            name: name ? String(name) : String(login),
+            is_child: isChild
+        };
+    });
+
+    return mapped.filter(Boolean);
+}
+
+function getProfileByLogin(login) {
+    if (!login) return null;
+    return state.profiles.find(p => p && p.login === login) || null;
+}
+
+function getProfileDisplayLabel(login) {
+    const prof = getProfileByLogin(login);
+    if (!prof) return String(login || '');
+
+    // Show configured name first, but keep card number visible.
+    if (prof.name && prof.name !== prof.login) {
+        return `${prof.name} (${prof.login})`;
+    }
+    return prof.login;
+}
+
+function getFiltersStorageKey(profileLogin) {
+    const p = profileLogin || state.currentProfile;
     if (!p) return null;
-    // Profile name comes from backend and is displayed in UI; keep it readable but unique.
+    // Keyed by login (card number) because that's the stable identifier used by backend.
     return `${FILTERS_STORAGE_PREFIX}${encodeURIComponent(String(p))}`;
 }
 
-function saveSelectedProfile(profileName) {
-    if (!profileName) return;
+function saveSelectedProfile(profileLogin) {
+    if (!profileLogin) return;
     try {
-        localStorage.setItem(SELECTED_PROFILE_KEY, String(profileName));
+        localStorage.setItem(SELECTED_PROFILE_KEY, String(profileLogin));
     } catch (e) {
         console.warn('LocalStorage save selected profile failed', e);
     }
@@ -266,20 +309,22 @@ async function loadProfiles() {
         const res = await fetch(`${API_BASE}/profiles`);
         const json = await res.json();
         if (json.success) {
-            state.profiles = json.data;
+            state.profiles = normalizeProfilesList(json.data);
             renderProfilesList();
             populateTwinProfileSelect();
 
             // Prefer saved profile if available
             if (!state.currentProfile && state.profiles.length > 0) {
                 const savedProfile = getSavedProfile();
-                if (savedProfile && state.profiles.includes(savedProfile)) {
+                const savedExists = savedProfile && state.profiles.some(p => p.login === savedProfile);
+
+                if (savedExists) {
                     selectProfile(savedProfile);
                 } else {
-                    if (savedProfile && !state.profiles.includes(savedProfile)) {
+                    if (savedProfile && !savedExists) {
                         clearSavedProfile();
                     }
-                    selectProfile(state.profiles[0]);
+                    selectProfile(state.profiles[0].login);
                 }
             }
         }
@@ -294,26 +339,26 @@ function populateTwinProfileSelect() {
     select.innerHTML = '<option value="">Wybierz drugie dziecko...</option>';
 
     state.profiles.forEach(p => {
-        if (p !== state.currentProfile) {
-            const opt = document.createElement('option');
-            opt.value = p;
-            opt.textContent = p;
-            select.appendChild(opt);
-        }
+        if (!p || p.login === state.currentProfile) return;
+
+        const opt = document.createElement('option');
+        opt.value = p.login; // keep login (card number) for API calls
+        opt.textContent = getProfileDisplayLabel(p.login);
+        select.appendChild(opt);
     });
 }
 
-function selectProfile(profileName) {
+function selectProfile(profileLogin) {
     const prevProfile = state.currentProfile;
-    if (prevProfile && prevProfile !== profileName) {
+    if (prevProfile && prevProfile !== profileLogin) {
         // Persist filters of previous profile before switching.
         saveState();
     }
 
-    state.currentProfile = profileName;
-    saveSelectedProfile(profileName);
+    state.currentProfile = profileLogin;
+    saveSelectedProfile(profileLogin);
 
-    document.getElementById('currentProfileLabel').textContent = profileName;
+    document.getElementById('currentProfileLabel').textContent = getProfileDisplayLabel(profileLogin);
     document.getElementById('profilesModal').classList.add('hidden');
 
     // Reset filters to defaults and restore per-profile state
@@ -730,7 +775,7 @@ async function checkSchedulerStatus() {
                 info += ` | Ost. wynik: ${json.data.last_results.count} wizyt (${formatTime(json.data.last_results.timestamp)})`;
             }
             if (json.data.twin_profile) {
-                info += ` | 👯 Tryb Bliźniak: ${json.data.twin_profile}`;
+                info += ` | 👯 Tryb Bliźniak: ${getProfileDisplayLabel(json.data.twin_profile)}`;
             }
             detailsText.textContent = info;
 
@@ -968,11 +1013,13 @@ function renderProfilesList() {
     const list = document.getElementById('profilesList');
     list.innerHTML = '';
     state.profiles.forEach(p => {
+        if (!p) return;
+
         const div = document.createElement('div');
         div.className = 'profile-item';
-        if (p === state.currentProfile) div.classList.add('active');
-        div.textContent = p;
-        div.onclick = () => selectProfile(p);
+        if (p.login === state.currentProfile) div.classList.add('active');
+        div.textContent = getProfileDisplayLabel(p.login);
+        div.onclick = () => selectProfile(p.login);
         list.appendChild(div);
     });
 }
