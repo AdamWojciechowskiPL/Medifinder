@@ -179,17 +179,31 @@ class MedicoverApp:
 
         start = None
         end = None
-        try:
-            if start_date:
-                start = date.fromisoformat(start_date)
-        except Exception:
-            self.logger.warning(f"Nieprawidłowy start_date: {start_date}")
+        
+        def parse_date_input(d_str: str) -> Optional[date]:
+            if not d_str:
+                return None
+            try:
+                # Try parsing as date YYYY-MM-DD
+                return date.fromisoformat(d_str)
+            except ValueError:
+                try:
+                    # Try parsing as datetime (e.g. ISO from JS with time)
+                    # Handle Z suffix manually if needed
+                    s = d_str.replace('Z', '+00:00')
+                    return datetime.fromisoformat(s).date()
+                except Exception:
+                    return None
 
-        try:
-            if end_date:
-                end = date.fromisoformat(end_date)
-        except Exception:
-            self.logger.warning(f"Nieprawidłowy end_date: {end_date}")
+        if start_date:
+            start = parse_date_input(start_date)
+            if not start:
+                self.logger.warning(f"Nieprawidłowy start_date: {start_date}")
+
+        if end_date:
+            end = parse_date_input(end_date)
+            if not end:
+                self.logger.warning(f"Nieprawidłowy end_date: {end_date}")
 
         if not start and not end:
             return appointments
