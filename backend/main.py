@@ -1,4 +1,3 @@
-# backend/main.py
 
 import os
 import sys
@@ -419,6 +418,11 @@ def search_appointments():
     user_email = get_current_user_email()
     try:
         data = request.get_json() or {}
+        
+        specialty_ids = data.get('specialty_ids')
+        if not specialty_ids or len(specialty_ids) == 0:
+             return jsonify({'success': False, 'error': 'Specjalność jest obowiązkowa'}), 400
+
         results = med_app.search_appointments(
             user_email=user_email,
             profile=data.get('profile'),
