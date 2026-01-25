@@ -123,6 +123,8 @@ class MedicoverApp:
                     global_end_time = time(int(parts[0]), int(parts[1]))
             except Exception: pass
 
+        self.logger.info(f"Filtrowanie: {len(appointments)} wizyt. Excluded: {excluded_dates}, PrefDays: {preferred_days}")
+
         for apt in appointments:
             dt = self._parse_appointment_date_dt(apt)
             if not dt:
@@ -133,6 +135,7 @@ class MedicoverApp:
             if excluded_dates:
                 apt_date = dt.date()
                 if apt_date in excluded_dates:
+                    self.logger.debug(f"Odrzucono wizytę (Excluded Date): {apt_date}")
                     continue
 
             # 1. Sprawdź dzień tygodnia (0=Pon, 6=Nd)
@@ -140,6 +143,7 @@ class MedicoverApp:
             
             # Jeśli user zaznaczył "dni tygodnia" w checkboxach, sprawdź to
             if preferred_days and weekday not in preferred_days:
+                self.logger.debug(f"Odrzucono wizytę (Weekday): {weekday} not in {preferred_days}")
                 continue
 
             # 2. Sprawdź godziny
@@ -156,6 +160,7 @@ class MedicoverApp:
                     e_time = time(int(e_parts[0]), int(e_parts[1]))
                     
                     if t < s_time or t > e_time:
+                        self.logger.debug(f"Odrzucono wizytę (Specific Time): {t} outside {s_time}-{e_time}")
                         continue # Poza zakresem specyficznym dla dnia
                     
                     specific_range_found = True
@@ -165,8 +170,10 @@ class MedicoverApp:
             # Jeśli nie znaleziono specyficznego zakresu, użyj globalnego (jeśli zdefiniowany)
             if not specific_range_found:
                 if global_start_time and t < global_start_time:
+                    self.logger.debug(f"Odrzucono wizytę (Global Start): {t} < {global_start_time}")
                     continue
                 if global_end_time and t > global_end_time:
+                    self.logger.debug(f"Odrzucono wizytę (Global End): {t} > {global_end_time}")
                     continue
 
             filtered.append(apt)
@@ -292,8 +299,10 @@ class MedicoverApp:
             excluded_dates_raw = kwargs.get('excluded_dates')
             excluded_dates = []
             if excluded_dates_raw:
-                try: excluded_dates = [date.fromisoformat(d) for d in excluded_dates_raw]
-                except Exception: pass
+                try: 
+                    excluded_dates = [date.fromisoformat(d) for d in excluded_dates_raw]
+                except Exception as e: 
+                    self.logger.error(f"Error parsing excluded_dates: {e}")
 
             filtered = self._filter_results_by_preferences(
                 filtered, 
