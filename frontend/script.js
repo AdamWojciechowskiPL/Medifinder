@@ -36,6 +36,8 @@ const FILTERS_LOCKED_TOAST = 'Wyłącz automat, aby zmienić filtry.';
 const FILTERS_STORAGE_PREFIX = 'medifinder_last_filters__';
 const LEGACY_FILTERS_KEY = 'medifinder_last_filters';
 
+const SELECTED_PROFILE_KEY = 'medifinder_selected_profile';
+
 function getDefaultFilters() {
     return {
         specialtyIds: [],
@@ -55,6 +57,32 @@ function getFiltersStorageKey(profileName) {
     if (!p) return null;
     // Profile name comes from backend and is displayed in UI; keep it readable but unique.
     return `${FILTERS_STORAGE_PREFIX}${encodeURIComponent(String(p))}`;
+}
+
+function saveSelectedProfile(profileName) {
+    if (!profileName) return;
+    try {
+        localStorage.setItem(SELECTED_PROFILE_KEY, String(profileName));
+    } catch (e) {
+        console.warn('LocalStorage save selected profile failed', e);
+    }
+}
+
+function getSavedProfile() {
+    try {
+        const p = localStorage.getItem(SELECTED_PROFILE_KEY);
+        return p ? String(p) : null;
+    } catch (e) {
+        return null;
+    }
+}
+
+function clearSavedProfile() {
+    try {
+        localStorage.removeItem(SELECTED_PROFILE_KEY);
+    } catch (e) {
+        // ignore
+    }
 }
 
 function normalizeIdArray(value) {
@@ -242,9 +270,17 @@ async function loadProfiles() {
             renderProfilesList();
             populateTwinProfileSelect();
 
-            // Auto select first profile if none selected
+            // Prefer saved profile if available
             if (!state.currentProfile && state.profiles.length > 0) {
-                selectProfile(state.profiles[0]);
+                const savedProfile = getSavedProfile();
+                if (savedProfile && state.profiles.includes(savedProfile)) {
+                    selectProfile(savedProfile);
+                } else {
+                    if (savedProfile && !state.profiles.includes(savedProfile)) {
+                        clearSavedProfile();
+                    }
+                    selectProfile(state.profiles[0]);
+                }
             }
         }
     } catch (e) {
@@ -275,6 +311,8 @@ function selectProfile(profileName) {
     }
 
     state.currentProfile = profileName;
+    saveSelectedProfile(profileName);
+
     document.getElementById('currentProfileLabel').textContent = profileName;
     document.getElementById('profilesModal').classList.add('hidden');
 
