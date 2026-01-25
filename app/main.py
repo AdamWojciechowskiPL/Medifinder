@@ -135,7 +135,7 @@ class MedicoverApp:
             if excluded_dates:
                 apt_date = dt.date()
                 if apt_date in excluded_dates:
-                    self.logger.debug(f"Odrzucono wizytę (Excluded Date): {apt_date}")
+                    self.logger.info(f"Odrzucono wizytę (Excluded Date): {apt_date}")
                     continue
 
             # 1. Sprawdź dzień tygodnia (0=Pon, 6=Nd)
@@ -143,7 +143,7 @@ class MedicoverApp:
             
             # Jeśli user zaznaczył "dni tygodnia" w checkboxach, sprawdź to
             if preferred_days and weekday not in preferred_days:
-                self.logger.debug(f"Odrzucono wizytę (Weekday): {weekday} not in {preferred_days}")
+                self.logger.info(f"Odrzucono wizytę (Weekday): {weekday} not in {preferred_days}")
                 continue
 
             # 2. Sprawdź godziny
@@ -160,7 +160,7 @@ class MedicoverApp:
                     e_time = time(int(e_parts[0]), int(e_parts[1]))
                     
                     if t < s_time or t > e_time:
-                        self.logger.debug(f"Odrzucono wizytę (Specific Time): {t} outside {s_time}-{e_time}")
+                        self.logger.info(f"Odrzucono wizytę (Specific Time): {t} outside {s_time}-{e_time}")
                         continue # Poza zakresem specyficznym dla dnia
                     
                     specific_range_found = True
@@ -170,13 +170,13 @@ class MedicoverApp:
             # Jeśli nie znaleziono specyficznego zakresu, użyj globalnego (jeśli zdefiniowany)
             if not specific_range_found:
                 if global_start_time and t < global_start_time:
-                    self.logger.debug(f"Odrzucono wizytę (Global Start): {t} < {global_start_time}")
+                    self.logger.info(f"Odrzucono wizytę (Global Start): {t} < {global_start_time}")
                     continue
                 if global_end_time and t > global_end_time:
-                    self.logger.debug(f"Odrzucono wizytę (Global End): {t} > {global_end_time}")
+                    self.logger.info(f"Odrzucono wizytę (Global End): {t} > {global_end_time}")
                     continue
 
-            self.logger.debug(f"Zaakceptowano wizytę: {dt}")
+            self.logger.info(f"Zaakceptowano wizytę: {dt}")
             filtered.append(apt)
 
         return filtered
