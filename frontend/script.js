@@ -12,6 +12,9 @@ let state = {
     clinics: [],
     searchResults: [],
     schedulerStatus: null,
+    ui: {
+        filtersLocked: false
+    },
     filters: {
         specialtyIds: [],
         doctorIds: [],
@@ -28,6 +31,7 @@ let state = {
 const API_BASE = '/api/v1';
 const SEARCH_BTN_LABEL = '🔍 Wyszukaj';
 const SEARCH_BTN_DISABLED_LABEL = '🔍 Wyszukaj (wyłącz automat)';
+const FILTERS_LOCKED_TOAST = 'Wyłącz automat, aby zmienić filtry.';
 
 function normalizeIdArray(value) {
     if (!Array.isArray(value)) return [];
@@ -65,6 +69,68 @@ function setManualSearchEnabled(enabled) {
     btn.title = 'Ręczne wyszukiwanie jest zablokowane, gdy automat jest włączony.';
 }
 
+function setPointerDisabled(el, disabled) {
+    if (!el) return;
+    el.style.pointerEvents = disabled ? 'none' : 'auto';
+    el.style.opacity = disabled ? '0.6' : '1';
+    el.setAttribute('aria-disabled', disabled ? 'true' : 'false');
+}
+
+function disableInputsInContainer(container, disabled) {
+    if (!container) return;
+    container.querySelectorAll('input, select, button, textarea').forEach(el => {
+        el.disabled = disabled;
+    });
+}
+
+function setFiltersEnabled(enabled) {
+    const locked = !enabled;
+    state.ui.filtersLocked = locked;
+
+    // Filters panel main inputs
+    ['specialtySelect', 'dateFrom', 'dateTo', 'hourFrom', 'hourTo', 'toggleAdvancedFilters', 'excludeDateInput', 'addExcludedDateBtn', 'resetBtn'].forEach(id => {
+        const el = document.getElementById(id);
+        if (el) el.disabled = locked;
+    });
+
+    // Custom dropdown triggers (they are divs)
+    setPointerDisabled(document.getElementById('doctorsTrigger'), locked);
+    setPointerDisabled(document.getElementById('clinicsTrigger'), locked);
+
+    // Dropdown inner inputs/buttons/checkboxes
+    disableInputsInContainer(document.getElementById('doctorsDropdown'), locked);
+    disableInputsInContainer(document.getElementById('clinicsDropdown'), locked);
+    disableInputsInContainer(document.getElementById('dayTimeRangesContainer'), locked);
+
+    // Weekdays (divs)
+    const weekdays = document.getElementById('weekdaysContainer');
+    if (weekdays) {
+        weekdays.querySelectorAll('.weekday-item').forEach(item => {
+            item.style.pointerEvents = locked ? 'none' : 'auto';
+            item.style.opacity = locked ? '0.6' : '1';
+        });
+    }
+
+    // Excluded dates remove buttons (renderExcludedDates respects lock, but make sure UI updates)
+    renderExcludedDates();
+
+    // Close dropdowns if locked (avoid confusing open state)
+    if (locked) {
+        const dd1 = document.getElementById('doctorsDropdown');
+        const dd2 = document.getElementById('clinicsDropdown');
+        if (dd1) dd1.classList.remove('active');
+        if (dd2) dd2.classList.remove('active');
+    }
+}
+
+function setSchedulerOptionsEnabled(enabled) {
+    const locked = !enabled;
+    ['checkInterval', 'autoBook', 'enableTwinBooking', 'twinProfileSelect'].forEach(id => {
+        const el = document.getElementById(id);
+        if (el) el.disabled = locked;
+    });
+}
+
 // --- INIT ---
 document.addEventListener('DOMContentLoaded', async () => {
     checkAuthStatus();
@@ -89,19 +155,18 @@ async function checkAuthStatus() {
         console.log('Auth Status:', data); // DEBUG
 
         if (data.authenticated) {
-            document.getElementById('loginOverlay').style.display = 'none'; // Force hide
-            document.getElementById('loginOverlay').classList.remove('visible'); // Remove class too
+            document.getElementById('loginOverlay').style.display = 'none';
+            document.getElementById('loginOverlay').classList.remove('visible');
             document.getElementById('appContent').classList.remove('hidden');
             document.getElementById('userLabel').textContent = data.user.email;
             initializeApp();
         } else {
-            document.getElementById('loginOverlay').style.display = 'flex'; // Force show
+            document.getElementById('loginOverlay').style.display = 'flex';
             document.getElementById('loginOverlay').classList.add('visible');
-            document.getElementById('appContent').classList.add('hidden'); // Ensure app is hidden
+            document.getElementById('appContent').classList.add('hidden');
         }
     } catch (e) {
         console.error('Auth check failed', e);
-        // Fallback to login screen on error
         document.getElementById('loginOverlay').style.display = 'flex';
         document.getElementById('loginOverlay').classList.add('visible');
     }
@@ -142,7 +207,6 @@ async function loadProfiles() {
     }
 }
 
-// Helper for Twin Select
 function populateTwinProfileSelect() {
     const select = document.getElementById('twinProfileSelect');
     if (!select) return;
@@ -185,7 +249,6 @@ async function loadDictionaries() {
     const docJson = await docRes.json();
     if (docJson.success) {
         state.doctors = docJson.data;
-        // Apply filter initially in case filters were restored
         filterDoctorsBySpecialty();
     }
 
@@ -199,6 +262,9 @@ async function loadDictionaries() {
 
     // Render Weekdays Grid
     renderWeekdaysGrid();
+
+    // Ensure inputs reflect current lock status
+    setFiltersEnabled(!state.ui.filtersLocked);
 }
 
 // --- UI RENDERING ---
@@ -226,6 +292,10 @@ function renderSpecialtiesSelect() {
 
     // Add change listener for doctor filtering
     select.onchange = () => {
+        if (state.ui.filtersLocked) {
+            showToast(FILTERS_LOCKED_TOAST, 'info');
+            return;
+        }
         updateFiltersFromUI();
         filterDoctorsBySpecialty();
     };
@@ -260,12 +330,21 @@ function renderDropdownList(items, containerId, filterKey) {
             <label for="${filterKey}_${item.id}">${item.name}</label>
         `;
 
+        const checkbox = div.querySelector('input');
+        checkbox.disabled = state.ui.filtersLocked;
+
         // Restore checked state
         if (state.filters[filterKey].includes(parseInt(item.id))) {
-            div.querySelector('input').checked = true;
+            checkbox.checked = true;
         }
 
-        div.querySelector('input').addEventListener('change', (e) => {
+        checkbox.addEventListener('change', (e) => {
+            if (state.ui.filtersLocked) {
+                e.target.checked = !e.target.checked;
+                showToast(FILTERS_LOCKED_TOAST, 'info');
+                return;
+            }
+
             const val = parseInt(item.id);
             if (e.target.checked) {
                 if (!state.filters[filterKey].includes(val)) {
@@ -276,6 +355,7 @@ function renderDropdownList(items, containerId, filterKey) {
             }
             updateDropdownTriggerLabel(containerId.replace('List', 'Trigger'), state.filters[filterKey].length);
         });
+
         container.appendChild(div);
     });
 
@@ -294,7 +374,14 @@ function renderWeekdaysGrid() {
         if (state.filters.preferredDays.includes(index)) div.classList.add('selected');
         div.textContent = day;
         div.dataset.day = index;
+        div.style.pointerEvents = state.ui.filtersLocked ? 'none' : 'auto';
+        div.style.opacity = state.ui.filtersLocked ? '0.6' : '1';
+
         div.onclick = () => {
+            if (state.ui.filtersLocked) {
+                showToast(FILTERS_LOCKED_TOAST, 'info');
+                return;
+            }
             div.classList.toggle('selected');
             if (div.classList.contains('selected')) {
                 if (!state.filters.preferredDays.includes(index)) state.filters.preferredDays.push(index);
@@ -330,11 +417,13 @@ function renderDayTimeRanges(days) {
             <input type="time" class="form-control form-control-sm" style="width:80px" data-day="${idx}" data-type="end" value="${saved.end || ''}">
         `;
 
-        // Add listeners
         const startIn = row.querySelector('[data-type="start"]');
         const endIn = row.querySelector('[data-type="end"]');
+        startIn.disabled = state.ui.filtersLocked;
+        endIn.disabled = state.ui.filtersLocked;
 
         const updateState = () => {
+            if (state.ui.filtersLocked) return;
             const s = startIn.value;
             const e = endIn.value;
             if (s && e) {
@@ -362,12 +451,18 @@ function renderExcludedDates() {
         tag.style.display = 'flex';
         tag.style.alignItems = 'center';
         tag.style.gap = '4px';
-        tag.innerHTML = `${dateStr} <span style="cursor:pointer; font-weight:bold;">&times;</span>`;
 
-        tag.querySelector('span').onclick = () => {
-            state.filters.excludedDates = state.filters.excludedDates.filter(d => d !== dateStr);
-            renderExcludedDates();
-        };
+        const removeDisabled = state.ui.filtersLocked;
+        tag.innerHTML = `${dateStr} <span style="cursor:${removeDisabled ? 'default' : 'pointer'}; font-weight:bold; opacity:${removeDisabled ? '0.5' : '1'};">&times;</span>`;
+
+        const removeSpan = tag.querySelector('span');
+        if (!removeDisabled) {
+            removeSpan.onclick = () => {
+                state.filters.excludedDates = state.filters.excludedDates.filter(d => d !== dateStr);
+                renderExcludedDates();
+            };
+        }
+
         list.appendChild(tag);
     });
 }
@@ -449,7 +544,6 @@ async function startScheduler() {
 
     if (twinEnabled && !twinProfile) {
         showToast('Wybierz profil drugiego dziecka!', 'error');
-        // Reset checkbox to prevent confusion
         document.getElementById('enableTwinBooking').checked = false;
         document.getElementById('enableAutoCheck').checked = false;
         return;
@@ -471,17 +565,23 @@ async function startScheduler() {
         const json = await res.json();
         if (json.success) {
             showToast('Automat uruchomiony', 'success');
-            // Immediately block manual search in UI.
+            // Immediately lock UI params.
             setManualSearchEnabled(false);
+            setFiltersEnabled(false);
+            setSchedulerOptionsEnabled(false);
             checkSchedulerStatus();
         } else {
             showToast(json.error, 'error');
             document.getElementById('enableAutoCheck').checked = false;
             setManualSearchEnabled(true);
+            setFiltersEnabled(true);
+            setSchedulerOptionsEnabled(true);
         }
     } catch (e) {
         showToast('Błąd startu automatu', 'error');
         setManualSearchEnabled(true);
+        setFiltersEnabled(true);
+        setSchedulerOptionsEnabled(true);
     }
 }
 
@@ -495,6 +595,8 @@ async function stopScheduler() {
         });
         showToast('Automat zatrzymany', 'info');
         setManualSearchEnabled(true);
+        setFiltersEnabled(true);
+        setSchedulerOptionsEnabled(true);
         checkSchedulerStatus();
     } catch (e) {
         console.error(e);
@@ -518,8 +620,10 @@ async function checkSchedulerStatus() {
             statusBox.classList.add('active');
             switchEl.checked = true;
 
-            // Block manual search when scheduler is active
+            // Lock all filter params when scheduler is active
             setManualSearchEnabled(false);
+            setFiltersEnabled(false);
+            setSchedulerOptionsEnabled(false);
 
             // Show details
             detailsRow.style.display = 'block';
@@ -547,6 +651,8 @@ async function checkSchedulerStatus() {
             detailsRow.style.display = 'none';
 
             setManualSearchEnabled(true);
+            setFiltersEnabled(true);
+            setSchedulerOptionsEnabled(true);
         }
     } catch (e) {
         console.error(e);
@@ -611,6 +717,11 @@ function setupEventListeners() {
 
     // Reset Button
     document.getElementById('resetBtn').addEventListener('click', () => {
+        if (state.ui.filtersLocked) {
+            showToast(FILTERS_LOCKED_TOAST, 'info');
+            return;
+        }
+
         // Clear filters
         state.filters.specialtyIds = [];
         state.filters.doctorIds = [];
@@ -637,17 +748,29 @@ function setupEventListeners() {
 
         // Refresh
         filterDoctorsBySpecialty();
+        renderDropdownList(state.clinics, 'clinicsList', 'clinicIds');
+        renderWeekdaysGrid();
+        renderExcludedDates();
         renderProfilesList();
     });
 
     // Advanced Filters Toggle
     document.getElementById('toggleAdvancedFilters').addEventListener('click', () => {
+        if (state.ui.filtersLocked) {
+            showToast(FILTERS_LOCKED_TOAST, 'info');
+            return;
+        }
         const panel = document.getElementById('advancedFiltersPanel');
         panel.classList.toggle('hidden');
     });
 
     // Excluded Date Add
     document.getElementById('addExcludedDateBtn').addEventListener('click', () => {
+        if (state.ui.filtersLocked) {
+            showToast(FILTERS_LOCKED_TOAST, 'info');
+            return;
+        }
+
         const inp = document.getElementById('excludeDateInput');
         if (inp.value) {
             if (!state.filters.excludedDates.includes(inp.value)) {
@@ -664,6 +787,10 @@ function setupEventListeners() {
 
 // Helpers
 function toggleDropdown(id) {
+    if (state.ui.filtersLocked) {
+        showToast(FILTERS_LOCKED_TOAST, 'info');
+        return;
+    }
     document.getElementById(id).classList.toggle('active');
 }
 
@@ -674,6 +801,7 @@ function updateDropdownTriggerLabel(id, count) {
 }
 
 function filterDropdown(input, listId) {
+    if (state.ui.filtersLocked) return;
     const filter = input.value.toLowerCase();
     const items = document.getElementById(listId).getElementsByClassName('dropdown-item');
     Array.from(items).forEach(item => {
@@ -683,6 +811,11 @@ function filterDropdown(input, listId) {
 }
 
 function clearSelection(listId) {
+    if (state.ui.filtersLocked) {
+        showToast(FILTERS_LOCKED_TOAST, 'info');
+        return;
+    }
+
     let filterKey = '';
     if (listId === 'doctorsList') filterKey = 'doctorIds';
     if (listId === 'clinicsList') filterKey = 'clinicIds';
@@ -738,7 +871,7 @@ document.getElementById('addProfileForm').addEventListener('submit', async (e) =
     try {
         const res = await fetch(`${API_BASE}/profiles/add`, {
             method: 'POST',
-            headers: {'Content-Type': 'application/json'},
+            headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ name, login, password: pass, is_child_account: isChild })
         });
         const json = await res.json();
@@ -749,7 +882,9 @@ document.getElementById('addProfileForm').addEventListener('submit', async (e) =
         } else {
             showToast(json.error || 'Błąd', 'error');
         }
-    } catch(e) { console.error(e); }
+    } catch (e) {
+        console.error(e);
+    }
 });
 
 // Save/Restore State (simplified)
@@ -762,8 +897,8 @@ function restoreState() {
     if (saved) {
         try {
             const parsed = JSON.parse(saved);
-            state.filters = {...state.filters, ...parsed};
-        } catch(e) {}
+            state.filters = { ...state.filters, ...parsed };
+        } catch (e) {}
     }
 
     // Normalize stored ids (important when JSON contains strings)
