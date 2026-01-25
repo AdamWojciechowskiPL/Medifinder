@@ -26,6 +26,8 @@ let state = {
 };
 
 const API_BASE = '/api/v1';
+const SEARCH_BTN_LABEL = '🔍 Wyszukaj';
+const SEARCH_BTN_DISABLED_LABEL = '🔍 Wyszukaj (wyłącz automat)';
 
 function normalizeIdArray(value) {
     if (!Array.isArray(value)) return [];
@@ -34,11 +36,40 @@ function normalizeIdArray(value) {
         .filter(v => Number.isFinite(v));
 }
 
+function parseUtcDate(isoStr) {
+    if (!isoStr) return null;
+    const s = String(isoStr).trim();
+
+    // If string already has a timezone (Z or offset), Date() will convert to local automatically.
+    if (/[zZ]$/.test(s) || /[+-]\d\d:?\d\d$/.test(s)) {
+        return new Date(s);
+    }
+
+    // If backend sends naive ISO (no timezone), treat it as UTC.
+    return new Date(`${s}Z`);
+}
+
+function setManualSearchEnabled(enabled) {
+    const btn = document.getElementById('searchBtn');
+    if (!btn) return;
+
+    if (enabled) {
+        btn.disabled = false;
+        btn.textContent = SEARCH_BTN_LABEL;
+        btn.title = '';
+        return;
+    }
+
+    btn.disabled = true;
+    btn.textContent = SEARCH_BTN_DISABLED_LABEL;
+    btn.title = 'Ręczne wyszukiwanie jest zablokowane, gdy automat jest włączony.';
+}
+
 // --- INIT ---
 document.addEventListener('DOMContentLoaded', async () => {
     checkAuthStatus();
     setupEventListeners();
-    
+
     // Setup Twin Booking UI toggle
     const twinCheck = document.getElementById('enableTwinBooking');
     const twinSelect = document.getElementById('twinProfileSelect');
@@ -54,7 +85,7 @@ async function checkAuthStatus() {
     try {
         const res = await fetch('/auth/me');
         const data = await res.json();
-        
+
         console.log('Auth Status:', data); // DEBUG
 
         if (data.authenticated) {
@@ -99,8 +130,8 @@ async function loadProfiles() {
         if (json.success) {
             state.profiles = json.data;
             renderProfilesList();
-            populateTwinProfileSelect(); // NEW
-            
+            populateTwinProfileSelect();
+
             // Auto select first profile if none selected
             if (!state.currentProfile && state.profiles.length > 0) {
                 selectProfile(state.profiles[0]);
@@ -111,14 +142,14 @@ async function loadProfiles() {
     }
 }
 
-// NEW: Helper for Twin Select
+// Helper for Twin Select
 function populateTwinProfileSelect() {
     const select = document.getElementById('twinProfileSelect');
     if (!select) return;
     select.innerHTML = '<option value="">Wybierz drugie dziecko...</option>';
-    
+
     state.profiles.forEach(p => {
-        if (p !== state.currentProfile) { // Don't show current profile
+        if (p !== state.currentProfile) {
             const opt = document.createElement('option');
             opt.value = p;
             opt.textContent = p;
@@ -131,11 +162,11 @@ function selectProfile(profileName) {
     state.currentProfile = profileName;
     document.getElementById('currentProfileLabel').textContent = profileName;
     document.getElementById('profilesModal').classList.add('hidden');
-    
+
     // Refresh dictionaries for this profile
     loadDictionaries();
     checkSchedulerStatus();
-    populateTwinProfileSelect(); // Update twin select to exclude current
+    populateTwinProfileSelect();
 }
 
 async function loadDictionaries() {
@@ -165,7 +196,7 @@ async function loadDictionaries() {
         state.clinics = clinJson.data;
         renderDropdownList(state.clinics, 'clinicsList', 'clinicIds');
     }
-    
+
     // Render Weekdays Grid
     renderWeekdaysGrid();
 }
@@ -177,22 +208,22 @@ function renderSpecialtiesSelect() {
     select.innerHTML = '<option value="">Wybierz specjalność...</option>';
     state.specialties.forEach(s => {
         const opt = document.createElement('option');
-        opt.value = JSON.stringify(s.ids); // Store array as string value
+        opt.value = JSON.stringify(s.ids);
         opt.textContent = s.name;
         select.appendChild(opt);
     });
-    
+
     // Restore selection if exists
     if (state.filters.specialtyIds.length > 0) {
-         const val = JSON.stringify(state.filters.specialtyIds);
-         for(let i=0; i<select.options.length; i++) {
-             if (select.options[i].value === val) {
-                 select.selectedIndex = i;
-                 break;
-             }
-         }
+        const val = JSON.stringify(state.filters.specialtyIds);
+        for (let i = 0; i < select.options.length; i++) {
+            if (select.options[i].value === val) {
+                select.selectedIndex = i;
+                break;
+            }
+        }
     }
-    
+
     // Add change listener for doctor filtering
     select.onchange = () => {
         updateFiltersFromUI();
@@ -203,7 +234,7 @@ function renderSpecialtiesSelect() {
 function filterDoctorsBySpecialty() {
     const selectedSpecIds = normalizeIdArray(state.filters.specialtyIds || []);
     let filtered = state.doctors;
-    
+
     if (selectedSpecIds.length > 0) {
         filtered = state.doctors.filter(d => {
             const docSpecsRaw = d.specialty_ids ?? d.specialtyIds ?? d.specialties;
@@ -212,7 +243,7 @@ function filterDoctorsBySpecialty() {
             return docSpecs.some(id => selectedSpecIds.includes(id));
         });
     }
-    
+
     renderDropdownList(filtered, 'doctorsList', 'doctorIds');
     document.getElementById('doctorsCount').textContent = filtered.length;
 }
@@ -220,7 +251,7 @@ function filterDoctorsBySpecialty() {
 function renderDropdownList(items, containerId, filterKey) {
     const container = document.getElementById(containerId);
     container.innerHTML = '';
-    
+
     items.forEach(item => {
         const div = document.createElement('div');
         div.className = 'dropdown-item';
@@ -228,7 +259,7 @@ function renderDropdownList(items, containerId, filterKey) {
             <input type="checkbox" value="${item.id}" id="${filterKey}_${item.id}">
             <label for="${filterKey}_${item.id}">${item.name}</label>
         `;
-        
+
         // Restore checked state
         if (state.filters[filterKey].includes(parseInt(item.id))) {
             div.querySelector('input').checked = true;
@@ -247,7 +278,7 @@ function renderDropdownList(items, containerId, filterKey) {
         });
         container.appendChild(div);
     });
-    
+
     // Update label count initially
     updateDropdownTriggerLabel(containerId.replace('List', 'Trigger'), state.filters[filterKey].length);
 }
@@ -256,7 +287,7 @@ function renderWeekdaysGrid() {
     const container = document.getElementById('weekdaysContainer');
     const days = ['Pn', 'Wt', 'Śr', 'Cz', 'Pt', 'So', 'Nd'];
     container.innerHTML = '';
-    
+
     days.forEach((day, index) => {
         const div = document.createElement('div');
         div.className = 'weekday-item';
@@ -273,36 +304,36 @@ function renderWeekdaysGrid() {
         };
         container.appendChild(div);
     });
-    
+
     // Also init advanced time ranges
     renderDayTimeRanges(days);
 }
 
 function renderDayTimeRanges(days) {
     const container = document.getElementById('dayTimeRangesContainer');
-    if(!container) return;
+    if (!container) return;
     container.innerHTML = '';
-    
+
     days.forEach((dayName, idx) => {
         const row = document.createElement('div');
         row.style.display = 'flex';
         row.style.alignItems = 'center';
         row.style.justifyContent = 'space-between';
         row.style.fontSize = '0.85rem';
-        
+
         const saved = state.filters.dayTimeRanges[idx] || {};
-        
+
         row.innerHTML = `
             <span style="width: 30px; font-weight:500;">${dayName}</span>
             <input type="time" class="form-control form-control-sm" style="width:80px" data-day="${idx}" data-type="start" value="${saved.start || ''}">
             <span>-</span>
             <input type="time" class="form-control form-control-sm" style="width:80px" data-day="${idx}" data-type="end" value="${saved.end || ''}">
         `;
-        
+
         // Add listeners
         const startIn = row.querySelector('[data-type="start"]');
         const endIn = row.querySelector('[data-type="end"]');
-        
+
         const updateState = () => {
             const s = startIn.value;
             const e = endIn.value;
@@ -312,19 +343,19 @@ function renderDayTimeRanges(days) {
                 delete state.filters.dayTimeRanges[idx];
             }
         };
-        
+
         startIn.addEventListener('change', updateState);
         endIn.addEventListener('change', updateState);
-        
+
         container.appendChild(row);
     });
 }
 
 function renderExcludedDates() {
     const list = document.getElementById('excludedDatesList');
-    if(!list) return;
+    if (!list) return;
     list.innerHTML = '';
-    
+
     state.filters.excludedDates.forEach(dateStr => {
         const tag = document.createElement('span');
         tag.className = 'badge badge-secondary';
@@ -332,7 +363,7 @@ function renderExcludedDates() {
         tag.style.alignItems = 'center';
         tag.style.gap = '4px';
         tag.innerHTML = `${dateStr} <span style="cursor:pointer; font-weight:bold;">&times;</span>`;
-        
+
         tag.querySelector('span').onclick = () => {
             state.filters.excludedDates = state.filters.excludedDates.filter(d => d !== dateStr);
             renderExcludedDates();
@@ -341,12 +372,17 @@ function renderExcludedDates() {
     });
 }
 
-
 // --- ACTIONS ---
 
 async function handleSearch() {
+    // Manual search is blocked when scheduler is active.
+    if (state.schedulerStatus && state.schedulerStatus.active) {
+        showToast('Wyłącz automat, aby wykonać ręczne wyszukiwanie.', 'info');
+        return;
+    }
+
     updateFiltersFromUI();
-    
+
     if (state.filters.specialtyIds.length === 0) {
         showToast('Wybierz specjalność!', 'error');
         return;
@@ -355,30 +391,30 @@ async function handleSearch() {
     const btn = document.getElementById('searchBtn');
     btn.disabled = true;
     btn.textContent = 'Szukanie...';
-    
+
     try {
         const payload = buildSearchPayload();
-        
+
         const res = await fetch(`${API_BASE}/appointments/search`, {
             method: 'POST',
-            headers: {'Content-Type': 'application/json'},
+            headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify(payload)
         });
-        
+
         const json = await res.json();
         if (json.success) {
             state.searchResults = json.data;
             renderResults();
             document.getElementById('resultsSource').textContent = `(Znaleziono: ${json.count})`;
-            saveState(); // Save successful search params
+            saveState();
         } else {
             showToast(json.error || 'Błąd wyszukiwania', 'error');
         }
     } catch (e) {
         showToast('Błąd połączenia', 'error');
     } finally {
-        btn.disabled = false;
-        btn.textContent = '🔍 Wyszukaj';
+        // If scheduler became active in the meantime, keep the button disabled.
+        setManualSearchEnabled(!(state.schedulerStatus && state.schedulerStatus.active));
     }
 }
 
@@ -403,14 +439,14 @@ async function startScheduler() {
         showToast('Wybierz specjalność!', 'error');
         return;
     }
-    
+
     const interval = document.getElementById('checkInterval').value;
     const autoBook = document.getElementById('autoBook').checked;
-    
+
     // TWIN BOOKING PARAMS
     const twinEnabled = document.getElementById('enableTwinBooking').checked;
     const twinProfile = document.getElementById('twinProfileSelect').value;
-    
+
     if (twinEnabled && !twinProfile) {
         showToast('Wybierz profil drugiego dziecka!', 'error');
         // Reset checkbox to prevent confusion
@@ -423,25 +459,29 @@ async function startScheduler() {
         ...buildSearchPayload(),
         interval_minutes: parseInt(interval),
         auto_book: autoBook,
-        twin_profile: twinEnabled ? twinProfile : null // Pass twin profile if enabled
+        twin_profile: twinEnabled ? twinProfile : null
     };
 
     try {
         const res = await fetch(`${API_BASE}/scheduler/start`, {
             method: 'POST',
-            headers: {'Content-Type': 'application/json'},
+            headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify(payload)
         });
         const json = await res.json();
         if (json.success) {
             showToast('Automat uruchomiony', 'success');
+            // Immediately block manual search in UI.
+            setManualSearchEnabled(false);
             checkSchedulerStatus();
         } else {
             showToast(json.error, 'error');
-            document.getElementById('enableAutoCheck').checked = false; // Revert switch
+            document.getElementById('enableAutoCheck').checked = false;
+            setManualSearchEnabled(true);
         }
     } catch (e) {
         showToast('Błąd startu automatu', 'error');
+        setManualSearchEnabled(true);
     }
 }
 
@@ -450,12 +490,15 @@ async function stopScheduler() {
     try {
         await fetch(`${API_BASE}/scheduler/stop`, {
             method: 'POST',
-            headers: {'Content-Type': 'application/json'},
+            headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ profile: state.currentProfile })
         });
         showToast('Automat zatrzymany', 'info');
+        setManualSearchEnabled(true);
         checkSchedulerStatus();
-    } catch (e) { console.error(e); }
+    } catch (e) {
+        console.error(e);
+    }
 }
 
 async function checkSchedulerStatus() {
@@ -463,18 +506,21 @@ async function checkSchedulerStatus() {
     try {
         const res = await fetch(`${API_BASE}/scheduler/status?profile=${state.currentProfile}`);
         const json = await res.json();
-        
+
         const statusBox = document.getElementById('autoCheckStatus');
         const switchEl = document.getElementById('enableAutoCheck');
         const detailsRow = document.getElementById('schedulerDetailsRow');
         const detailsText = document.getElementById('schedulerDetails');
-        
+
         if (json.success && json.data && json.data.active) {
             state.schedulerStatus = json.data;
             statusBox.textContent = 'AKTYWNY';
             statusBox.classList.add('active');
             switchEl.checked = true;
-            
+
+            // Block manual search when scheduler is active
+            setManualSearchEnabled(false);
+
             // Show details
             detailsRow.style.display = 'block';
             let info = `Następne: ${formatTime(json.data.next_run)} | Przebiegi: ${json.data.runs_count}`;
@@ -482,24 +528,29 @@ async function checkSchedulerStatus() {
                 info += ` | Ost. wynik: ${json.data.last_results.count} wizyt (${formatTime(json.data.last_results.timestamp)})`;
             }
             if (json.data.twin_profile) {
-                 info += ` | 👯 Tryb Bliźniak: ${json.data.twin_profile}`;
+                info += ` | 👯 Tryb Bliźniak: ${json.data.twin_profile}`;
             }
             detailsText.textContent = info;
-            
+
             // If we have fresh results from scheduler, show them
             if (json.data.last_results && json.data.last_results.appointments) {
                 state.searchResults = json.data.last_results.appointments;
                 renderResults();
                 document.getElementById('resultsSource').textContent = '(z Automatu)';
             }
-            
+
         } else {
+            state.schedulerStatus = json.data || null;
             statusBox.textContent = 'Wyłączony';
             statusBox.classList.remove('active');
             switchEl.checked = false;
             detailsRow.style.display = 'none';
+
+            setManualSearchEnabled(true);
         }
-    } catch (e) { console.error(e); }
+    } catch (e) {
+        console.error(e);
+    }
 }
 
 // --- UTILS ---
@@ -512,11 +563,11 @@ function updateFiltersFromUI() {
     } else {
         state.filters.specialtyIds = [];
     }
-    
+
     // Dates
     state.filters.dateFrom = document.getElementById('dateFrom').value;
     state.filters.dateTo = document.getElementById('dateTo').value;
-    
+
     // Time
     state.filters.timeRange.start = document.getElementById('hourFrom').value + ":00";
     state.filters.timeRange.end = document.getElementById('hourTo').value + ":00";
@@ -525,12 +576,12 @@ function updateFiltersFromUI() {
 function renderResults() {
     const tbody = document.getElementById('resultsBody');
     tbody.innerHTML = '';
-    
+
     if (state.searchResults.length === 0) {
         tbody.innerHTML = '<tr><td colspan="5" style="text-align:center; padding: 20px;">Brak wyników</td></tr>';
         return;
     }
-    
+
     state.searchResults.forEach(apt => {
         const dateObj = new Date(apt.appointmentDate);
         const tr = document.createElement('tr');
@@ -548,7 +599,7 @@ function renderResults() {
 function setupEventListeners() {
     // Search Button
     document.getElementById('searchBtn').addEventListener('click', handleSearch);
-    
+
     // Scheduler Switch
     document.getElementById('enableAutoCheck').addEventListener('change', (e) => {
         if (e.target.checked) {
@@ -567,7 +618,7 @@ function setupEventListeners() {
         state.filters.preferredDays = [];
         state.filters.excludedDates = [];
         state.filters.dayTimeRanges = {};
-        
+
         // Reset defaults for dates
         const now = new Date();
         const tomorrow = new Date(now);
@@ -576,16 +627,16 @@ function setupEventListeners() {
         const next30 = new Date(tomorrow);
         next30.setDate(tomorrow.getDate() + 30);
         state.filters.dateTo = next30.toISOString().split('T')[0];
-        
+
         // Reset UI
         document.querySelectorAll('input[type="checkbox"]').forEach(c => c.checked = false);
         document.getElementById('specialtySelect').value = "";
         document.getElementById('dateFrom').value = state.filters.dateFrom;
         document.getElementById('dateTo').value = state.filters.dateTo;
         document.getElementById('excludedDatesList').innerHTML = "";
-        
+
         // Refresh
-        filterDoctorsBySpecialty(); // Reset doctor filter
+        filterDoctorsBySpecialty();
         renderProfilesList();
     });
 
@@ -631,12 +682,11 @@ function filterDropdown(input, listId) {
     });
 }
 
-// NEW: Clear selection function for dropdowns
 function clearSelection(listId) {
     let filterKey = '';
     if (listId === 'doctorsList') filterKey = 'doctorIds';
     if (listId === 'clinicsList') filterKey = 'clinicIds';
-    
+
     if (filterKey) {
         state.filters[filterKey] = [];
         const container = document.getElementById(listId);
@@ -648,8 +698,9 @@ function clearSelection(listId) {
 }
 
 function formatTime(isoStr) {
-    if (!isoStr) return '--:--';
-    return new Date(isoStr).toLocaleTimeString('pl-PL', {hour:'2-digit', minute:'2-digit'});
+    const d = parseUtcDate(isoStr);
+    if (!d || Number.isNaN(d.getTime())) return '--:--';
+    return d.toLocaleTimeString('pl-PL', { hour: '2-digit', minute: '2-digit' });
 }
 
 function showToast(msg, type='info') {
@@ -683,7 +734,7 @@ document.getElementById('addProfileForm').addEventListener('submit', async (e) =
     const login = document.getElementById('newProfileLogin').value;
     const pass = document.getElementById('newProfilePass').value;
     const isChild = document.getElementById('newProfileIsChild').checked;
-    
+
     try {
         const res = await fetch(`${API_BASE}/profiles/add`, {
             method: 'POST',
@@ -726,16 +777,16 @@ function restoreState() {
         const tomorrow = new Date(now);
         tomorrow.setDate(tomorrow.getDate() + 1);
         state.filters.dateFrom = tomorrow.toISOString().split('T')[0];
-        
+
         const next30 = new Date(tomorrow);
         next30.setDate(tomorrow.getDate() + 30);
         state.filters.dateTo = next30.toISOString().split('T')[0];
     }
 
     // Apply to UI
-    if(document.getElementById('dateFrom')) document.getElementById('dateFrom').value = state.filters.dateFrom;
-    if(document.getElementById('dateTo')) document.getElementById('dateTo').value = state.filters.dateTo;
-    
+    if (document.getElementById('dateFrom')) document.getElementById('dateFrom').value = state.filters.dateFrom;
+    if (document.getElementById('dateTo')) document.getElementById('dateTo').value = state.filters.dateTo;
+
     // Restore other UI elements
     renderExcludedDates();
 }
