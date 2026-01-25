@@ -157,11 +157,26 @@ class MedicoverClient:
         return [] # Zwróć pustą listę, jeśli wszystkie próby zawiodły
 
     def book_appointment(self, appointment: Dict[str, Any]) -> Dict[str, Any]:
-        """Rezerwuje wizytę, implementując logikę ponownego logowania."""
+        """
+        Rezerwuje wizytę. Używa istniejącej sesji, jeśli jest aktywna.
+        NIE uruchamia Selenium automatycznie, aby nie tracić czasu, chyba że token całkowicie wygasł.
+        """
         booking_string = appointment.get("bookingString")
         if not booking_string:
             return {"success": False, "error": "missing_booking_string", "message": "Brak klucza 'bookingString' w danych wizyty."}
 
+        # SZYBKA ŚCIEŻKA: Próba rezerwacji na obecnym tokenie (bez sprawdzania czy jest logged_in, zakładamy że tak)
+        if self.current_token:
+            try:
+                self.logger.info("Szybka rezerwacja: Próba użycia istniejącego tokenu...")
+                return self.api.book_appointment(booking_string)
+            except AuthenticationException:
+                self.logger.warning("Szybka rezerwacja: Token wygasł. Przechodzę do pełnej procedury odnawiania.")
+            except Exception as e:
+                self.logger.error(f"Szybka rezerwacja: Błąd API: {e}")
+                # Nie przerywamy, próbujemy standardowej ścieżki (może to jednak kwestia auth)
+
+        # STANDARDOWA ŚCIEŻKA (ze sprawdzaniem logowania i retry)
         max_retries = 1
         for attempt in range(max_retries + 1):
             try:
