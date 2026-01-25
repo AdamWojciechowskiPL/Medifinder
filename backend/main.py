@@ -1,11 +1,11 @@
 # backend/main.py
 
-# ... (imports remain the same)
 import os
 import sys
 import shutil
 import logging
 import json
+import atexit
 from pathlib import Path
 from datetime import datetime, date
 
@@ -22,7 +22,7 @@ load_dotenv()
 ROOT_DIR = Path(__file__).parent.parent.resolve()
 APP_DIR = ROOT_DIR / "app"
 CONFIG_DIR = ROOT_DIR / "config"
-SEED_DIR = ROOT_DIR / "config_seed"  # Nowy katalog z danymi startowymi
+SEED_DIR = ROOT_DIR / "config_seed"
 FRONTEND_DIR = ROOT_DIR / "frontend"
 
 sys.path.insert(0, str(ROOT_DIR))
@@ -66,13 +66,10 @@ def seed_config_files():
                         
                         logger.info(f"🔍 {filename}: SRC={src_size}B, DST={dst_size}B")
 
-                        # 1. Sprawdź czy plik jest pusty/uszkodzony (< 10B)
                         if dst_size < 10 and filename != "profiles.json":
                             should_copy = True
                             reason = f"Plik docelowy zbyt mały ({dst_size}B)"
                         
-                        # 2. Sprawdź czy plik nie jest przypadkiem metadanymi JSON zamiast właściwą treścią (błąd z przeszłości)
-                        # Sprawdzamy, czy plik zawiera klucz "type": "file" na początku
                         elif filename != "profiles.json":
                             with open(dst, 'r', encoding='utf-8') as f:
                                 try:
@@ -83,10 +80,7 @@ def seed_config_files():
                                 except Exception:
                                     pass
 
-                        # 3. Dla słowników statycznych: zawsze wymuszamy nadpisanie jeśli jest mniejszy niż seed
                         if not should_copy and filename in ["specialties.json", "clinics.json", "doctors.json"]:
-                            # Jeśli plik w volume jest mniejszy o ponad 20% od seeda, to podejrzane
-                            # (np. specialties.json 600B vs 3000B)
                              if dst_size < src_size * 0.8:
                                  should_copy = True
                                  reason = f"Plik docelowy znacznie mniejszy od oryginału ({dst_size}B < {src_size}B)"
@@ -137,17 +131,27 @@ if app.config['GOOGLE_CLIENT_ID'] and app.config['GOOGLE_CLIENT_SECRET']:
     )
 
 med_app = None
+scheduler = None
 
 try:
     from app.main import MedicoverApp
+    from backend.scheduler import MedifinderScheduler
     logger.info("✅ MedicoverApp zaimportowany poprawnie")
     try:
         med_app = MedicoverApp(CONFIG_DIR)
         logger.info("✅ Medifinder zainicjalizowany globalnie")
+        
+        # Inicjalizacja schedulera
+        scheduler = MedifinderScheduler(CONFIG_DIR, med_app)
+        logger.info("✅ Scheduler zainicjalizowany")
+        
+        # Zamknij scheduler przy wyłączeniu aplikacji
+        atexit.register(lambda: scheduler.shutdown() if scheduler else None)
+        
     except Exception as e:
-        logger.error(f"❌ Błąd inicjalizacji instancji MedicoverApp: {e}", exc_info=True)
+        logger.error(f"❌ Błąd inicjalizacji: {e}", exc_info=True)
 except ImportError as e:
-    logger.error(f"❌ Nie można zaimportować klasy MedicoverApp: {e}")
+    logger.error(f"❌ Nie można zaimportować: {e}")
 
 # Helper to get current user email
 def get_current_user_email():
@@ -155,13 +159,21 @@ def get_current_user_email():
         return session['user'].get('email')
     return None
 
+def require_login(fn):
+    from functools import wraps
+    @wraps(fn)
+    def wrapper(*args, **kwargs):
+        if 'user' not in session:
+            return jsonify({'success': False, 'error': 'Nieautoryzowany'}), 401
+        return fn(*args, **kwargs)
+    return wrapper
+
 # ======== API & AUTH ROUTES =========
 
 @app.route('/health', methods=['GET'])
 def health_check():
-    return jsonify({'status': 'ok', 'service': 'Medifinder API', 'version': '1.3.2'}), 200
+    return jsonify({'status': 'ok', 'service': 'Medifinder API', 'version': '2.0.0'}), 200
 
-# Endpoint diagnostyczny
 @app.route('/api/v1/debug/config', methods=['GET'])
 def debug_config():
     """Sprawdza stan plików konfiguracyjnych."""
@@ -182,11 +194,10 @@ def debug_config():
             "seed_size": fseed.stat().st_size if fseed.exists() else -1,
         }
         
-        # Próba odczytu zawartości (skrócona)
         if fpath.exists():
             try:
                 with open(fpath, 'r', encoding='utf-8') as f:
-                    content = f.read(100) # pierwsze 100 znaków
+                    content = f.read(100)
                     file_info["head"] = content
             except Exception as e:
                 file_info["error"] = str(e)
@@ -194,15 +205,6 @@ def debug_config():
         status["files"][fname] = file_info
         
     return jsonify(status)
-
-def require_login(fn):
-    from functools import wraps
-    @wraps(fn)
-    def wrapper(*args, **kwargs):
-        if 'user' not in session:
-            return jsonify({'success': False, 'error': 'Nieautoryzowany'}), 401
-        return fn(*args, **kwargs)
-    return wrapper
 
 @app.route('/auth/login')
 def auth_login():
@@ -238,14 +240,86 @@ def auth_me():
         return jsonify({'authenticated': False})
     return jsonify({'authenticated': True, 'user': session['user']})
 
-# API V1
+# ======== SCHEDULER API =========
+
+@app.route('/api/v1/scheduler/start', methods=['POST'])
+@require_login
+def scheduler_start():
+    """Uruchamia zadanie cyklicznego sprawdzania dla użytkownika."""
+    if not scheduler:
+        return jsonify({'success': False, 'error': 'Scheduler nie jest zainicjalizowany'}), 500
+    
+    user_email = get_current_user_email()
+    data = request.get_json() or {}
+    
+    try:
+        result = scheduler.start_task(
+            user_email=user_email,
+            profile=data.get('profile'),
+            search_params={
+                'specialty_ids': data.get('specialty_ids', []),
+                'doctor_ids': data.get('doctor_ids', []),
+                'clinic_ids': data.get('clinic_ids', []),
+                'preferred_days': data.get('preferred_days', []),
+                'time_range': data.get('time_range'),
+                'excluded_dates': data.get('excluded_dates', [])
+            },
+            interval_minutes=data.get('interval_minutes', 5),
+            auto_book=data.get('auto_book', False)
+        )
+        return jsonify(result), 200
+    except Exception as e:
+        logger.error(f"Błąd uruchamiania zadania: {e}", exc_info=True)
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+@app.route('/api/v1/scheduler/stop', methods=['POST'])
+@require_login
+def scheduler_stop():
+    """Zatrzymuje zadanie cyklicznego sprawdzania."""
+    if not scheduler:
+        return jsonify({'success': False, 'error': 'Scheduler nie jest zainicjalizowany'}), 500
+    
+    user_email = get_current_user_email()
+    data = request.get_json() or {}
+    
+    try:
+        result = scheduler.stop_task(user_email, data.get('profile'))
+        return jsonify(result), 200
+    except Exception as e:
+        logger.error(f"Błąd zatrzymywania zadania: {e}", exc_info=True)
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+@app.route('/api/v1/scheduler/status', methods=['GET'])
+@require_login
+def scheduler_status():
+    """Zwraca status zadania dla użytkownika i profilu."""
+    if not scheduler:
+        return jsonify({'success': False, 'error': 'Scheduler nie jest zainicjalizowany'}), 500
+    
+    user_email = get_current_user_email()
+    profile = request.args.get('profile')
+    
+    if not profile:
+        return jsonify({'success': False, 'error': 'Brak parametru profile'}), 400
+    
+    try:
+        status = scheduler.get_task_status(user_email, profile)
+        if status:
+            return jsonify({'success': True, 'data': status}), 200
+        else:
+            return jsonify({'success': True, 'data': None, 'message': 'Brak aktywnego zadania'}), 200
+    except Exception as e:
+        logger.error(f"Błąd pobierania statusu: {e}", exc_info=True)
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+# ======== PROFILES API =========
+
 @app.route('/api/v1/profiles', methods=['GET'])
 @require_login
 def get_profiles():
     if not med_app: return jsonify({'success': False, 'error': 'App not init'}), 500
     user_email = get_current_user_email()
     try:
-        # Pass user_email to get scoped profiles
         profiles = med_app.get_available_profiles(user_email)
         return jsonify({'success': True, 'data': profiles, 'count': len(profiles)}), 200
     except Exception as e: return jsonify({'success': False, 'error': str(e)}), 500
@@ -257,16 +331,17 @@ def add_profile():
     user_email = get_current_user_email()
     try:
         data = request.get_json() or {}
-        # Pass user_email to bind profile to this user
         med_app.add_profile(
             user_email=user_email,
             login=data.get('login'), 
             password=data.get('password'), 
             name=data.get('name'),
-            is_child_account=data.get('is_child_account', False) # Odbieramy flagę dziecka
+            is_child_account=data.get('is_child_account', False)
         )
         return jsonify({'success': True, 'message': 'Profil dodany'}), 201
     except Exception as e: return jsonify({'success': False, 'error': str(e)}), 500
+
+# ======== DICTIONARIES API =========
 
 @app.route('/api/v1/dictionaries/specialties', methods=['GET'])
 @require_login
@@ -277,7 +352,6 @@ def get_specialties():
         profile_name = request.args.get('profile')
         is_child = False
         if profile_name:
-            # Pass user_email to look up correct profile
             prof = med_app.profile_manager.get_profile(user_email, profile_name)
             if prof: is_child = prof.is_child_account
         
@@ -313,6 +387,8 @@ def get_clinics():
         return jsonify({'success': True, 'data': sorted(result, key=lambda x: x['name'])})
     except Exception as e: return jsonify({'success': False, 'error': str(e)}), 500
 
+# ======== APPOINTMENTS API =========
+
 @app.route('/api/v1/appointments/search', methods=['POST'])
 @require_login
 def search_appointments():
@@ -321,7 +397,7 @@ def search_appointments():
     try:
         data = request.get_json() or {}
         results = med_app.search_appointments(
-            user_email=user_email, # NEW: Context passed
+            user_email=user_email,
             profile=data.get('profile'),
             specialty_ids=data.get('specialty_ids'),
             doctor_ids=data.get('doctor_ids'),
@@ -343,15 +419,16 @@ def book_appointment():
     try:
         data = request.get_json() or {}
         result = med_app.book_appointment(
-            user_email=user_email, # NEW: Context passed
+            user_email=user_email,
             profile=data.get('profile'), 
             appointment_id=data.get('appointment_id'),
-            booking_string=data.get('booking_string') or data.get('bookingString') # Support both cases
+            booking_string=data.get('booking_string') or data.get('bookingString')
         )
         return jsonify({'success': True, 'message': 'Rezerwacja OK', 'data': result}), 200
     except Exception as e: return jsonify({'success': False, 'error': str(e)}), 500
 
 # ======== SERVING FRONTEND =========
+
 @app.route('/')
 def index():
     return send_from_directory(app.static_folder, 'index.html')
