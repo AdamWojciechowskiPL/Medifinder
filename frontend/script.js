@@ -48,16 +48,24 @@ async function checkAuthStatus() {
         const res = await fetch('/auth/me');
         const data = await res.json();
         
+        console.log('Auth Status:', data); // DEBUG
+
         if (data.authenticated) {
-            document.getElementById('loginOverlay').classList.remove('visible');
+            document.getElementById('loginOverlay').style.display = 'none'; // Force hide
+            document.getElementById('loginOverlay').classList.remove('visible'); // Remove class too
             document.getElementById('appContent').classList.remove('hidden');
             document.getElementById('userLabel').textContent = data.user.email;
             initializeApp();
         } else {
+            document.getElementById('loginOverlay').style.display = 'flex'; // Force show
             document.getElementById('loginOverlay').classList.add('visible');
+            document.getElementById('appContent').classList.add('hidden'); // Ensure app is hidden
         }
     } catch (e) {
         console.error('Auth check failed', e);
+        // Fallback to login screen on error
+        document.getElementById('loginOverlay').style.display = 'flex';
+        document.getElementById('loginOverlay').classList.add('visible');
     }
 }
 
