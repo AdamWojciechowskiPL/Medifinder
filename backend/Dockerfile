@@ -53,4 +53,5 @@ HEALTHCHECK --interval=30s --timeout=10s --start-period=10s --retries=3 \
 WORKDIR /app/backend
 
 # KLUCZOWA ZMIANA: Użyj zmiennej środowiskowej PORT z Railway
-CMD gunicorn --bind 0.0.0.0:${PORT:-5000} --workers 2 --timeout 120 --access-logfile - --error-logfile - main:app
+# Force 1 worker to avoid split-brain scheduler issues
+CMD gunicorn --bind 0.0.0.0:${PORT:-5000} --workers 1 --timeout 120 --access-logfile - --error-logfile - main:app
