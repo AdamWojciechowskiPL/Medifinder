@@ -7,7 +7,7 @@ import json
 import threading
 from pathlib import Path
 from datetime import datetime, timedelta
-from typing import Dict, Any, Optional
+from typing import Dict, Any, Optional, List
 from apscheduler.schedulers.background import BackgroundScheduler
 from apscheduler.triggers.interval import IntervalTrigger
 from apscheduler.jobstores.base import JobLookupError
@@ -53,7 +53,7 @@ class MedifinderScheduler:
         """Zapisuje aktualne zadania do pliku."""
         try:
             with open(self.tasks_config_file, 'w', encoding='utf-8') as f:
-                json.dump(self.tasks, f, indent=2, ensure_ascii=False)
+                json.dump(self.tasks, f, indent=2, ensure_ascii=False, default=str)
             logger.debug("Zadania zapisane do pliku")
         except Exception as e:
             logger.error(f"Błąd zapisu zadań: {e}")
@@ -78,7 +78,8 @@ class MedifinderScheduler:
             
             # Zapisz czas następnego wykonania
             self.tasks[task_id]['next_run'] = (datetime.now() + timedelta(minutes=interval_minutes)).isoformat()
-            self.tasks[task_id]['last_run'] = None
+            if 'last_run' not in self.tasks[task_id]:
+                self.tasks[task_id]['last_run'] = None
             
             logger.info(f"✅ Zadanie {task_id} zaplanowane (co {interval_minutes} min)")
         except Exception as e:
@@ -100,7 +101,8 @@ class MedifinderScheduler:
         
         try:
             # Aktualizuj czas ostatniego uruchomienia
-            self.tasks[task_id]['last_run'] = datetime.now().isoformat()
+            now = datetime.now()
+            self.tasks[task_id]['last_run'] = now.isoformat()
             
             # Wykonaj wyszukiwanie
             results = self.med_app.search_appointments(
@@ -110,6 +112,13 @@ class MedifinderScheduler:
             )
             
             logger.info(f"📊 [{task_id}] Znaleziono {len(results)} wizyt")
+            
+            # NOWE: Zapisz ostatnie wyniki
+            self.tasks[task_id]['last_results'] = {
+                'timestamp': now.isoformat(),
+                'count': len(results),
+                'appointments': results[:50]  # Ogranicz do 50 najnowszych
+            }
             
             # Jeśli auto-booking jest włączony i znaleziono wizyty
             if auto_book and results:
@@ -131,19 +140,32 @@ class MedifinderScheduler:
                     # Zapisz informację o sukcesie
                     self.tasks[task_id]['last_booking'] = {
                         'timestamp': datetime.now().isoformat(),
-                        'appointment': first_appointment
+                        'appointment': first_appointment,
+                        'success': True
                     }
                     self._save_tasks()
+                    return  # Zakończ wykonanie - zadanie zatrzymane
                 else:
                     logger.warning(f"⚠️ [{task_id}] Auto-rezerwacja nie powiodła się: {booking_result.get('message')}")
+                    self.tasks[task_id]['last_booking_attempt'] = {
+                        'timestamp': datetime.now().isoformat(),
+                        'success': False,
+                        'error': booking_result.get('message')
+                    }
             
             # Zaktualizuj czas następnego uruchomienia
             interval = task_data.get('interval_minutes', 5)
-            self.tasks[task_id]['next_run'] = (datetime.now() + timedelta(minutes=interval)).isoformat()
+            self.tasks[task_id]['next_run'] = (now + timedelta(minutes=interval)).isoformat()
+            self.tasks[task_id]['runs_count'] = task_data.get('runs_count', 0) + 1
             self._save_tasks()
             
         except Exception as e:
             logger.error(f"❌ [{task_id}] Błąd wykonania zadania: {e}", exc_info=True)
+            self.tasks[task_id]['last_error'] = {
+                'timestamp': datetime.now().isoformat(),
+                'error': str(e)
+            }
+            self._save_tasks()
     
     def start_task(self, user_email: str, profile: str, search_params: Dict[str, Any], 
                    interval_minutes: int = 5, auto_book: bool = False) -> Dict[str, Any]:
@@ -157,7 +179,8 @@ class MedifinderScheduler:
             'interval_minutes': interval_minutes,
             'auto_book': auto_book,
             'active': True,
-            'created_at': datetime.now().isoformat()
+            'created_at': datetime.now().isoformat(),
+            'runs_count': 0
         }
         
         self.tasks[task_id] = task_data
@@ -196,6 +219,16 @@ class MedifinderScheduler:
         """Zwraca status zadania dla użytkownika."""
         task_id = self._generate_task_id(user_email, profile)
         return self.tasks.get(task_id)
+    
+    def get_last_results(self, user_email: str, profile: str) -> Optional[Dict[str, Any]]:
+        """Zwraca ostatnie wyniki wyszukiwania dla zadania."""
+        task_id = self._generate_task_id(user_email, profile)
+        task_data = self.tasks.get(task_id)
+        
+        if not task_data:
+            return None
+        
+        return task_data.get('last_results')
     
     def get_all_user_tasks(self, user_email: str) -> Dict[str, Dict[str, Any]]:
         """Zwraca wszystkie zadania danego użytkownika."""
