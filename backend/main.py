@@ -345,7 +345,8 @@ def book_appointment():
         result = med_app.book_appointment(
             user_email=user_email, # NEW: Context passed
             profile=data.get('profile'), 
-            appointment_id=data.get('appointment_id')
+            appointment_id=data.get('appointment_id'),
+            booking_string=data.get('booking_string') or data.get('bookingString') # Support both cases
         )
         return jsonify({'success': True, 'message': 'Rezerwacja OK', 'data': result}), 200
     except Exception as e: return jsonify({'success': False, 'error': str(e)}), 500
