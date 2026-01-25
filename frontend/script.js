@@ -14,6 +14,7 @@ let searchResults = [];
 
 // Status polling interval
 let statusPollingInterval = null;
+let resultsPollingInterval = null;
 
 // =========================
 // INIT & AUTH
@@ -74,8 +75,9 @@ async function loadProfiles() {
             updateProfileUI();
             loadDictionaries();
             
-            // Check scheduler status for current profile
-            checkSchedulerStatus();
+            // NOWE: Załaduj ostatnie wyniki schedulera i sprawdź status
+            await loadLastSchedulerResults();
+            await checkSchedulerStatus();
         } else {
             toggleProfilesModal(); // Force create profile
         }
@@ -106,6 +108,48 @@ async function loadDictionaries() {
 }
 
 // =========================
+// NOWE: ŁADOWANIE OSTATNICH WYNIKÓW SCHEDULERA
+// =========================
+async function loadLastSchedulerResults() {
+    if (!currentProfile) return;
+    
+    try {
+        const resp = await fetch(`${API_URL}/api/v1/scheduler/results?profile=${currentProfile}`, {
+            credentials: 'include'
+        });
+        const data = await resp.json();
+        
+        if (data.success && data.data && data.data.appointments) {
+            const results = data.data;
+            console.log(`📊 Załadowano ${results.count} ostatnich wyników z ${results.timestamp}`);
+            
+            // Renderuj wyniki
+            searchResults = results.appointments;
+            renderResults();
+            
+            // Pokaż info o źródle wyników
+            const timestamp = new Date(results.timestamp);
+            const timeStr = timestamp.toLocaleString('pl-PL', {
+                day: '2-digit',
+                month: '2-digit',
+                year: 'numeric',
+                hour: '2-digit',
+                minute: '2-digit'
+            });
+            
+            const sourceEl = document.getElementById('resultsSource');
+            if (sourceEl) {
+                sourceEl.innerHTML = `🔄 Ostatnie wyniki z schedulera (${timeStr})`;
+            }
+            
+            showToast(`Załadowano ${results.count} wizyt z ostatniego sprawdzenia`, 'success');
+        }
+    } catch (e) {
+        console.error('Błąd ładowania ostatnich wyników:', e);
+    }
+}
+
+// =========================
 // UI LOGIC
 // =========================
 function updateProfileUI() {
@@ -127,7 +171,8 @@ function switchProfile(name) {
     toggleProfilesModal();
     loadDictionaries();
     
-    // Check scheduler status for new profile
+    // Załaduj dane dla nowego profilu
+    loadLastSchedulerResults();
     checkSchedulerStatus();
 }
 
@@ -337,6 +382,7 @@ async function startBackendScheduler() {
             
             // Start polling for status updates
             startStatusPolling();
+            startResultsPolling();
         } else {
             showToast('Błąd: ' + (data.error || data.message), 'error');
             document.getElementById('enableAutoCheck').checked = false;
@@ -371,8 +417,12 @@ async function stopBackendScheduler() {
             statusEl.style.color = 'black';
             statusEl.style.fontWeight = 'normal';
             
+            // Hide details
+            document.getElementById('schedulerDetailsRow').style.display = 'none';
+            
             // Stop polling
             stopStatusPolling();
+            stopResultsPolling();
         } else {
             showToast('Błąd zatrzymywania: ' + (data.error || data.message), 'error');
         }
@@ -422,6 +472,9 @@ async function checkSchedulerStatus() {
                 statusEl.style.color = 'green';
                 statusEl.style.fontWeight = 'bold';
                 
+                // NOWE: Pokaż szczegółowy status
+                updateSchedulerDetails(status);
+                
                 // Update auto-book status
                 const autoBookStatusEl = document.getElementById('autoBookStatus');
                 if (status.auto_book) {
@@ -433,6 +486,7 @@ async function checkSchedulerStatus() {
                 // Start polling if not already running
                 if (!statusPollingInterval) {
                     startStatusPolling();
+                    startResultsPolling();
                 }
             } else {
                 // Inactive
@@ -440,11 +494,65 @@ async function checkSchedulerStatus() {
                 document.getElementById('autoCheckStatus').textContent = 'Wyłączone';
                 document.getElementById('autoCheckStatus').style.color = 'black';
                 document.getElementById('autoCheckStatus').style.fontWeight = 'normal';
+                document.getElementById('schedulerDetailsRow').style.display = 'none';
             }
         }
     } catch (e) {
         console.error('Error checking scheduler status:', e);
     }
+}
+
+function updateSchedulerDetails(status) {
+    const detailsRow = document.getElementById('schedulerDetailsRow');
+    const detailsEl = document.getElementById('schedulerDetails');
+    
+    if (!detailsRow || !detailsEl) return;
+    
+    let html = '<div style="display: flex; flex-direction: column; gap: 3px;">';
+    
+    // Ostatnie sprawdzenie
+    if (status.last_run) {
+        const lastRun = new Date(status.last_run);
+        const timeStr = lastRun.toLocaleString('pl-PL', {
+            day: '2-digit',
+            month: '2-digit',
+            hour: '2-digit',
+            minute: '2-digit'
+        });
+        html += `<span>🕒 Ostatnie: ${timeStr}</span>`;
+    }
+    
+    // Liczba wykonań
+    if (status.runs_count !== undefined) {
+        html += `<span>🔢 Wykonań: ${status.runs_count}</span>`;
+    }
+    
+    // Ostatnie wyniki
+    if (status.last_results) {
+        const resTime = new Date(status.last_results.timestamp);
+        const resTimeStr = resTime.toLocaleString('pl-PL', {
+            day: '2-digit',
+            month: '2-digit',
+            hour: '2-digit',
+            minute: '2-digit'
+        });
+        html += `<span>📊 Ostatnie wyniki: ${status.last_results.count} wizyt (${resTimeStr})</span>`;
+    }
+    
+    // Ostatni błąd
+    if (status.last_error) {
+        const errTime = new Date(status.last_error.timestamp);
+        const errTimeStr = errTime.toLocaleTimeString('pl-PL', {
+            hour: '2-digit',
+            minute: '2-digit'
+        });
+        html += `<span style="color: #dc3545;">⚠️ Błąd: ${status.last_error.error.substring(0, 50)} (${errTimeStr})</span>`;
+    }
+    
+    html += '</div>';
+    
+    detailsEl.innerHTML = html;
+    detailsRow.style.display = 'block';
 }
 
 function startStatusPolling() {
@@ -460,6 +568,22 @@ function stopStatusPolling() {
     if (statusPollingInterval) {
         clearInterval(statusPollingInterval);
         statusPollingInterval = null;
+    }
+}
+
+function startResultsPolling() {
+    // Poll every 30 seconds to load new results
+    if (resultsPollingInterval) clearInterval(resultsPollingInterval);
+    
+    resultsPollingInterval = setInterval(() => {
+        loadLastSchedulerResults();
+    }, 30000);
+}
+
+function stopResultsPolling() {
+    if (resultsPollingInterval) {
+        clearInterval(resultsPollingInterval);
+        resultsPollingInterval = null;
     }
 }
 
@@ -507,6 +631,11 @@ async function searchAppointments(isBackground = false) {
         if (data.success) {
             searchResults = data.data;
             renderResults();
+            
+            // Wyczyść info o źródle - to są świeże wyniki
+            const sourceEl = document.getElementById('resultsSource');
+            if (sourceEl) sourceEl.innerHTML = '';
+            
             if (!isBackground) showToast(`Znaleziono: ${searchResults.length}`, 'success');
             return searchResults;
         } else {

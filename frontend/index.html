@@ -46,6 +46,11 @@
                     <label>minut</label>
                 </div>
 
+                <!-- NOWE: Szczegółowy status schedulera -->
+                <div class="panel-row indent" id="schedulerDetailsRow" style="display: none; margin-top: 5px; font-size: 0.9em; color: #666;">
+                    <div id="schedulerDetails"></div>
+                </div>
+
                 <div class="panel-row">
                     <label><strong>[-] Automatyczna Rezerwacja:</strong> <span id="autoBookStatus">Wyłączona</span></label>
                 </div>
@@ -145,6 +150,8 @@
             <div class="actions-bar">
                 <button id="bookSelectedBtn" class="btn btn-success" disabled>Zarezerwuj wybraną</button>
                 <button id="exportBtn" class="btn btn-info">Eksportuj do pliku</button>
+                <!-- NOWE: Info o źródle wyników -->
+                <span id="resultsSource" style="margin-left: auto; font-size: 0.9em; color: #666;"></span>
             </div>
 
             <!-- Sekcja 4: Tabela wyników -->
