@@ -57,6 +57,27 @@ class MedifinderScheduler:
             logger.debug("Zadania zapisane do pliku")
         except Exception as e:
             logger.error(f"Błąd zapisu zadań: {e}")
+
+    def _sync_tasks_from_file(self):
+        """Odświeża stan zadań z pliku (synchronizacja między workerami)."""
+        try:
+            if self.tasks_config_file.exists():
+                with open(self.tasks_config_file, 'r', encoding='utf-8') as f:
+                    saved_tasks = json.load(f)
+                    
+                    # Aktualizuj stan istniejących i dodaj nowe
+                    for tid, data in saved_tasks.items():
+                        self.tasks[tid] = data
+                    
+                    # Usuń zadania, których nie ma w pliku
+                    current_ids = set(self.tasks.keys())
+                    saved_ids = set(saved_tasks.keys())
+                    for tid in current_ids - saved_ids:
+                        if tid in self.tasks:
+                            del self.tasks[tid]
+        except Exception as e:
+            # Nie logujemy błędu przy każdym requeście, chyba że to coś poważnego
+            pass
     
     def _generate_task_id(self, user_email: str, profile: str) -> str:
         """Generuje unikalny ID zadania dla użytkownika i profilu."""
@@ -87,11 +108,20 @@ class MedifinderScheduler:
     
     def _execute_task(self, task_id: str):
         """Wykonuje zadanie cyklicznego sprawdzania."""
+        # Najpierw synchronizuj stan, aby upewnić się, że zadanie jest nadal aktywne
+        self._sync_tasks_from_file()
+
         if task_id not in self.tasks:
-            logger.warning(f"Zadanie {task_id} nie istnieje w konfiguracji")
+            logger.warning(f"Zadanie {task_id} nie istnieje w konfiguracji (usunięte?)")
             return
         
         task_data = self.tasks[task_id]
+        
+        # Sprawdź czy nadal aktywne (mógł zostać zatrzymany przez inny worker)
+        if not task_data.get('active', False):
+            logger.info(f"Zadanie {task_id} oznaczone jako nieaktywne. Pomijam wykonanie.")
+            return
+
         user_email = task_data['user_email']
         profile = task_data['profile']
         search_params = task_data['search_params']
@@ -199,7 +229,10 @@ class MedifinderScheduler:
         task_id = self._generate_task_id(user_email, profile)
         
         if task_id not in self.tasks:
-            return {'success': False, 'message': 'Zadanie nie istnieje'}
+            # Spróbuj odświeżyć, może zadanie istnieje w pliku?
+            self._sync_tasks_from_file()
+            if task_id not in self.tasks:
+                return {'success': False, 'message': 'Zadanie nie istnieje'}
         
         try:
             # Usuń z schedulera
@@ -217,11 +250,17 @@ class MedifinderScheduler:
     
     def get_task_status(self, user_email: str, profile: str) -> Optional[Dict[str, Any]]:
         """Zwraca status zadania dla użytkownika."""
+        # Synchronizuj z plikiem, aby mieć pewność, że mamy aktualny stan (dla wielu workerów)
+        self._sync_tasks_from_file()
+        
         task_id = self._generate_task_id(user_email, profile)
         return self.tasks.get(task_id)
     
     def get_last_results(self, user_email: str, profile: str) -> Optional[Dict[str, Any]]:
         """Zwraca ostatnie wyniki wyszukiwania dla zadania."""
+        # Synchronizuj, bo wyniki są zapisywane przez workera wykonującego zadanie
+        self._sync_tasks_from_file()
+        
         task_id = self._generate_task_id(user_email, profile)
         task_data = self.tasks.get(task_id)
         
@@ -232,6 +271,7 @@ class MedifinderScheduler:
     
     def get_all_user_tasks(self, user_email: str) -> Dict[str, Dict[str, Any]]:
         """Zwraca wszystkie zadania danego użytkownika."""
+        self._sync_tasks_from_file()
         return {tid: data for tid, data in self.tasks.items() if data.get('user_email') == user_email}
     
     def shutdown(self):
