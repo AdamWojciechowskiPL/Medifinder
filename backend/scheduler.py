@@ -67,6 +67,8 @@ class MedifinderScheduler:
                     
                     # Aktualizuj stan istniejących i dodaj nowe
                     for tid, data in saved_tasks.items():
+                        # Zachowaj lokalne obiekty jeśli są nowsze? 
+                        # Nie, plik jest źródłem prawdy dla statusu
                         self.tasks[tid] = data
                     
                     # Usuń zadania, których nie ma w pliku
@@ -75,9 +77,28 @@ class MedifinderScheduler:
                     for tid in current_ids - saved_ids:
                         if tid in self.tasks:
                             del self.tasks[tid]
+                            # Usuń też z schedulera jeśli tam wisi
+                            try:
+                                self.scheduler.remove_job(tid)
+                            except:
+                                pass
         except Exception as e:
-            # Nie logujemy błędu przy każdym requeście, chyba że to coś poważnego
+            # Nie logujemy błędu przy każdym requeście
             pass
+    
+    def _ensure_job_running(self, task_id: str):
+        """Sprawdza czy zadanie oznaczone jako aktywne faktycznie biegnie w tym workerze."""
+        if task_id not in self.tasks: return
+        
+        task_data = self.tasks[task_id]
+        if not task_data.get('active', False): return
+
+        # Sprawdź czy job jest w schedulerze tego workera
+        current_job = self.scheduler.get_job(task_id)
+        
+        if not current_job:
+            logger.warning(f"⚠️ Zadanie {task_id} jest aktywne w pliku, ale brak go w schedulerze tego workera. Przywracam...")
+            self._schedule_task(task_id, task_data)
     
     def _generate_task_id(self, user_email: str, profile: str) -> str:
         """Generuje unikalny ID zadania dla użytkownika i profilu."""
@@ -97,10 +118,9 @@ class MedifinderScheduler:
                 max_instances=1  # Zapobiega nakładaniu się wykonań
             )
             
-            # Zapisz czas następnego wykonania
-            self.tasks[task_id]['next_run'] = (datetime.now() + timedelta(minutes=interval_minutes)).isoformat()
-            if 'last_run' not in self.tasks[task_id]:
-                self.tasks[task_id]['last_run'] = None
+            # Zapisz czas następnego wykonania (jeśli brak)
+            if 'next_run' not in self.tasks[task_id]:
+                self.tasks[task_id]['next_run'] = (datetime.now() + timedelta(minutes=interval_minutes)).isoformat()
             
             logger.info(f"✅ Zadanie {task_id} zaplanowane (co {interval_minutes} min)")
         except Exception as e:
@@ -108,7 +128,7 @@ class MedifinderScheduler:
     
     def _execute_task(self, task_id: str):
         """Wykonuje zadanie cyklicznego sprawdzania."""
-        # Najpierw synchronizuj stan, aby upewnić się, że zadanie jest nadal aktywne
+        # Najpierw synchronizuj stan
         self._sync_tasks_from_file()
 
         if task_id not in self.tasks:
@@ -117,9 +137,11 @@ class MedifinderScheduler:
         
         task_data = self.tasks[task_id]
         
-        # Sprawdź czy nadal aktywne (mógł zostać zatrzymany przez inny worker)
         if not task_data.get('active', False):
             logger.info(f"Zadanie {task_id} oznaczone jako nieaktywne. Pomijam wykonanie.")
+            # Upewnij się, że jest usunięte z schedulera
+            try: self.scheduler.remove_job(task_id)
+            except: pass
             return
 
         user_email = task_data['user_email']
@@ -133,6 +155,7 @@ class MedifinderScheduler:
             # Aktualizuj czas ostatniego uruchomienia
             now = datetime.now()
             self.tasks[task_id]['last_run'] = now.isoformat()
+            self._save_tasks() # Zapisz start
             
             # Wykonaj wyszukiwanie
             results = self.med_app.search_appointments(
@@ -143,14 +166,14 @@ class MedifinderScheduler:
             
             logger.info(f"📊 [{task_id}] Znaleziono {len(results)} wizyt")
             
-            # NOWE: Zapisz ostatnie wyniki
+            # Zapisz wyniki
             self.tasks[task_id]['last_results'] = {
-                'timestamp': now.isoformat(),
+                'timestamp': datetime.now().isoformat(),
                 'count': len(results),
-                'appointments': results[:50]  # Ogranicz do 50 najnowszych
+                'appointments': results[:50]
             }
             
-            # Jeśli auto-booking jest włączony i znaleziono wizyty
+            # Auto-booking
             if auto_book and results:
                 first_appointment = results[0]
                 logger.info(f"🎯 [{task_id}] Auto-booking: próba rezerwacji pierwszej wizyty...")
@@ -164,17 +187,15 @@ class MedifinderScheduler:
                 
                 if booking_result.get('success'):
                     logger.info(f"✅ [{task_id}] AUTO-REZERWACJA UDANA! Zatrzymuję zadanie.")
-                    # Zatrzymaj zadanie po udanej rezerwacji
                     self.stop_task(user_email, profile)
                     
-                    # Zapisz informację o sukcesie
                     self.tasks[task_id]['last_booking'] = {
                         'timestamp': datetime.now().isoformat(),
                         'appointment': first_appointment,
                         'success': True
                     }
                     self._save_tasks()
-                    return  # Zakończ wykonanie - zadanie zatrzymane
+                    return
                 else:
                     logger.warning(f"⚠️ [{task_id}] Auto-rezerwacja nie powiodła się: {booking_result.get('message')}")
                     self.tasks[task_id]['last_booking_attempt'] = {
@@ -183,9 +204,9 @@ class MedifinderScheduler:
                         'error': booking_result.get('message')
                     }
             
-            # Zaktualizuj czas następnego uruchomienia
+            # Aktualizuj next_run
             interval = task_data.get('interval_minutes', 5)
-            self.tasks[task_id]['next_run'] = (now + timedelta(minutes=interval)).isoformat()
+            self.tasks[task_id]['next_run'] = (datetime.now() + timedelta(minutes=interval)).isoformat()
             self.tasks[task_id]['runs_count'] = task_data.get('runs_count', 0) + 1
             self._save_tasks()
             
@@ -229,19 +250,16 @@ class MedifinderScheduler:
         task_id = self._generate_task_id(user_email, profile)
         
         if task_id not in self.tasks:
-            # Spróbuj odświeżyć, może zadanie istnieje w pliku?
             self._sync_tasks_from_file()
             if task_id not in self.tasks:
                 return {'success': False, 'message': 'Zadanie nie istnieje'}
         
         try:
-            # Usuń z schedulera
             self.scheduler.remove_job(task_id)
             logger.info(f"🛑 Zadanie {task_id} zatrzymane")
         except JobLookupError:
-            logger.warning(f"Zadanie {task_id} nie było aktywne w schedulerze")
+            pass # Mogło go nie być w tym workerze
         
-        # Oznacz jako nieaktywne
         self.tasks[task_id]['active'] = False
         self.tasks[task_id]['stopped_at'] = datetime.now().isoformat()
         self._save_tasks()
@@ -250,24 +268,21 @@ class MedifinderScheduler:
     
     def get_task_status(self, user_email: str, profile: str) -> Optional[Dict[str, Any]]:
         """Zwraca status zadania dla użytkownika."""
-        # Synchronizuj z plikiem, aby mieć pewność, że mamy aktualny stan (dla wielu workerów)
         self._sync_tasks_from_file()
         
         task_id = self._generate_task_id(user_email, profile)
+        
+        # Samonaprawa: jeśli zadanie jest aktywne w pliku, ale nie działa u nas -> uruchom
+        self._ensure_job_running(task_id)
+        
         return self.tasks.get(task_id)
     
     def get_last_results(self, user_email: str, profile: str) -> Optional[Dict[str, Any]]:
         """Zwraca ostatnie wyniki wyszukiwania dla zadania."""
-        # Synchronizuj, bo wyniki są zapisywane przez workera wykonującego zadanie
         self._sync_tasks_from_file()
-        
         task_id = self._generate_task_id(user_email, profile)
         task_data = self.tasks.get(task_id)
-        
-        if not task_data:
-            return None
-        
-        return task_data.get('last_results')
+        return task_data.get('last_results') if task_data else None
     
     def get_all_user_tasks(self, user_email: str) -> Dict[str, Dict[str, Any]]:
         """Zwraca wszystkie zadania danego użytkownika."""
