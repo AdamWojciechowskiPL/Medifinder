@@ -5,9 +5,9 @@ interfejsu graficznego (GUI).
 
 import logging
 import sys
-from typing import Optional, List, Dict, Any
+from typing import Optional, List, Dict, Any, Tuple
 from pathlib import Path
-from datetime import date, datetime, time
+from datetime import date, datetime, time, timedelta
 
 # Zredukowane, niezbędne importy
 from .config import Config
@@ -50,6 +50,51 @@ class MedicoverApp:
             return datetime.fromisoformat(s)
         except Exception:
             return None
+            
+    def find_consecutive_slots(self, appointments: List[Dict[str, Any]]) -> List[Tuple[Dict[str, Any], Dict[str, Any]]]:
+        """
+        Znajduje pary wizyt następujących po sobie (u tego samego lekarza, w tej samej placówce).
+        Zakładamy odstęp 10-20 minut (standardowo 15 min).
+        """
+        if len(appointments) < 2:
+            return []
+            
+        # Grupuj po lekarzu i placówce
+        grouped = {}
+        for apt in appointments:
+            doc_id = apt.get('doctor', {}).get('id')
+            clinic_id = apt.get('clinic', {}).get('id')
+            if not doc_id or not clinic_id:
+                continue
+                
+            key = (doc_id, clinic_id)
+            if key not in grouped:
+                grouped[key] = []
+            grouped[key].append(apt)
+            
+        pairs = []
+        
+        for key, group in grouped.items():
+            # Sortuj po dacie
+            group.sort(key=lambda x: x.get('appointmentDate', ''))
+            
+            for i in range(len(group) - 1):
+                apt1 = group[i]
+                apt2 = group[i+1]
+                
+                dt1 = self._parse_appointment_date_dt(apt1)
+                dt2 = self._parse_appointment_date_dt(apt2)
+                
+                if not dt1 or not dt2:
+                    continue
+                    
+                diff = (dt2 - dt1).total_seconds() / 60
+                
+                # Tolerancja: zazwyczaj wizyty są co 15 min (diff=15), ale dajmy zakres 10-20 min
+                if 10 <= diff <= 20:
+                    pairs.append((apt1, apt2))
+                    
+        return pairs
 
     def _filter_results_by_preferences(self, appointments: List[Dict[str, Any]], 
                                      preferred_days: List[int], 
@@ -166,133 +211,74 @@ class MedicoverApp:
         return filtered
         
     def _update_data_from_appointments(self, appointments: List[Dict[str, Any]]) -> None:
-        """
-        Przetwarza listę wizyt i aktualizuje bazy danych lekarzy i placówek.
-        """
-        if not appointments:
-            return
-
+        if not appointments: return
         doctors_updated = 0
         clinics_updated = 0
-
         for apt in appointments:
             doctor = apt.get('doctor')
             clinic = apt.get('clinic')
             specialty = apt.get('specialty')
-            
             if doctor and specialty:
-                if self.doctor_manager.add_or_update(doctor, specialty.get('id')):
-                    doctors_updated += 1
-            
+                if self.doctor_manager.add_or_update(doctor, specialty.get('id')): doctors_updated += 1
             if clinic:
-                if self.clinic_manager.add_or_update(clinic):
-                    clinics_updated += 1
-        
+                if self.clinic_manager.add_or_update(clinic): clinics_updated += 1
         if doctors_updated > 0 or clinics_updated > 0:
-            self.logger.info(f"Aktualizacja baz danych zakończona. Nowi lekarze: {doctors_updated}, nowe placówki: {clinics_updated}.")
+            self.logger.info(f"Aktualizacja baz danych zakończona. Nowi: {doctors_updated} lek, {clinics_updated} plac.")
             
     def _setup_logging(self) -> None:
-        """Konfiguruje system logowania na podstawie danych z pliku config."""
         log_config = self.config.get('logging', {})
-        logging.basicConfig(
-            level=log_config.get('level', 'INFO').upper(),
-            format=log_config.get('format', '%(asctime)s - %(name)s - %(levelname)s - %(message)s'),
-            handlers=[logging.StreamHandler(sys.stdout), logging.FileHandler('medicover_app.log', encoding='utf-8')]
-        )
+        logging.basicConfig(level=log_config.get('level', 'INFO').upper(), format=log_config.get('format', '%(asctime)s - %(name)s - %(levelname)s - %(message)s'), handlers=[logging.StreamHandler(sys.stdout), logging.FileHandler('medicover_app.log', encoding='utf-8')])
 
     def _initialize_default_profile_and_client(self) -> None:
-        if self.profile_manager.profiles_path.exists():
-             pass
-        else:
-            self.logger.warning("Nie znaleziono pliku profili.")
+        if not self.profile_manager.profiles_path.exists(): self.logger.warning("Nie znaleziono pliku profili.")
 
-    def switch_profile(self, profile_name: str) -> bool:
-        self.logger.warning("switch_profile called without user context - legacy method")
-        return False
-
-    def get_available_profiles(self, user_email: str) -> List[str]:
-        return [p.username for p in self.profile_manager.get_user_profiles(user_email)]
-
-    def get_current_profile(self) -> Optional[str]:
-        return self.current_profile
-    
-    def add_profile(self, user_email: str, login: str, password: str, name: str, is_child_account: bool = False) -> bool:
-        return self.profile_manager.add_profile(user_email, login, password, name, is_child_account)
+    def switch_profile(self, profile_name: str) -> bool: return False
+    def get_available_profiles(self, user_email: str) -> List[str]: return [p.username for p in self.profile_manager.get_user_profiles(user_email)]
+    def get_current_profile(self) -> Optional[str]: return self.current_profile
+    def add_profile(self, user_email: str, login: str, password: str, name: str, is_child_account: bool = False) -> bool: return self.profile_manager.add_profile(user_email, login, password, name, is_child_account)
 
     def search_appointments(self, user_email: str = None, profile: str = None, **kwargs) -> List[Dict[str, Any]]:
-        """
-        Publiczna metoda do wyszukiwania wizyt.
-        Tworzy tymczasowego klienta na podstawie przekazanego profilu.
-        """
-        if not user_email or not profile:
-            self.logger.error("Brak kontekstu użytkownika lub profilu do wyszukiwania.")
-            return []
-            
+        if not user_email or not profile: return []
         credentials = self.profile_manager.get_credentials(user_email, profile)
-        if not credentials:
-             self.logger.error(f"Nie znaleziono poświadczeń dla {profile}")
-             return []
-             
+        if not credentials: return []
         username, password = credentials
-        
-        # Konfiguracja klienta
         client_config = self.config.data.copy()
         client_config['username'] = username
         client_config['password'] = password
         
         try:
             temp_client = MedicoverClient(client_config)
-            if not temp_client.login(username, password):
-                 self.logger.error("Logowanie nieudane")
-                 return []
+            if not temp_client.login(username, password): return []
 
-            # Przygotowanie parametrów wyszukiwania API
             search_params: Dict[str, Any] = {}
             if kwargs.get('specialty_ids'): search_params['SpecialtyIds'] = kwargs['specialty_ids']
             if kwargs.get('doctor_ids'): search_params['DoctorIds'] = kwargs['doctor_ids']
             if kwargs.get('clinic_ids'): search_params['ClinicIds'] = kwargs['clinic_ids']
-            
-            # Parametry dat
             start_date = kwargs.get('start_date')
             end_date = kwargs.get('end_date')
-            if start_date:
-                search_params['StartTime'] = start_date
-            if end_date:
-                search_params['EndTime'] = end_date
+            if start_date: search_params['StartTime'] = start_date
+            if end_date: search_params['EndTime'] = end_date
             
-            # Wyszukiwanie w API
             found = temp_client.search_appointments(search_params)
-            if not found:
-                return []
+            if not found: return []
 
-            # --- FILTROWANIE WYNIKÓW ---
-            # 1. Filtrowanie po zakresie dat (serwerowy fallback)
             filtered = self._filter_results_by_date_range(found, start_date, end_date)
             
-            # 2. Filtrowanie po preferencjach (dni tygodnia, godziny, wykluczenia)
-            preferred_days = kwargs.get('preferred_days')
-            time_range = kwargs.get('time_range')
-            day_time_ranges = kwargs.get('day_time_ranges')
             excluded_dates_raw = kwargs.get('excluded_dates')
-            
             excluded_dates = []
             if excluded_dates_raw:
-                try:
-                    excluded_dates = [date.fromisoformat(d) for d in excluded_dates_raw]
-                except Exception as e:
-                    self.logger.warning(f"Błąd parsowania excluded_dates: {e}")
+                try: excluded_dates = [date.fromisoformat(d) for d in excluded_dates_raw]
+                except Exception: pass
 
             filtered = self._filter_results_by_preferences(
                 filtered, 
-                preferred_days, 
-                time_range,
-                day_time_ranges,
+                kwargs.get('preferred_days'), 
+                kwargs.get('time_range'),
+                kwargs.get('day_time_ranges'),
                 excluded_dates
             )
 
-            if filtered:
-                self._update_data_from_appointments(filtered)
-
+            if filtered: self._update_data_from_appointments(filtered)
             return filtered
             
         except Exception as e:
@@ -300,16 +286,9 @@ class MedicoverApp:
             return []
 
     def book_appointment(self, user_email: str, profile: str, appointment_id: Any, booking_string: str = None) -> Dict[str, Any]:
-        """
-        Publiczna metoda do rezerwacji wizyty.
-        """
-        if not user_email or not profile:
-             return {"success": False, "message": "Brak danych profilu"}
-             
+        if not user_email or not profile: return {"success": False, "message": "Brak danych profilu"}
         credentials = self.profile_manager.get_credentials(user_email, profile)
-        if not credentials:
-             return {"success": False, "message": "Błąd poświadczeń"}
-             
+        if not credentials: return {"success": False, "message": "Błąd poświadczeń"}
         username, password = credentials
         client_config = self.config.data.copy()
         client_config['username'] = username
@@ -317,40 +296,26 @@ class MedicoverApp:
         
         try:
             temp_client = MedicoverClient(client_config)
-            if not temp_client.login(username, password):
-                 return {"success": False, "message": "Błąd logowania"}
+            if not temp_client.login(username, password): return {"success": False, "message": "Błąd logowania"}
             
             appointment_obj = {}
-            if booking_string:
-                appointment_obj["bookingString"] = booking_string
-            
-            if appointment_id:
-                 appointment_obj["id"] = appointment_id
-
-            if not appointment_obj.get("bookingString"):
-                return {"success": False, "message": "Brak wymaganego pola 'bookingString' do rezerwacji."}
+            if booking_string: appointment_obj["bookingString"] = booking_string
+            if appointment_id: appointment_obj["id"] = appointment_id
+            if not appointment_obj.get("bookingString"): return {"success": False, "message": "Brak bookingString"}
 
             return temp_client.book_appointment(appointment_obj)
-            
         except Exception as e:
             self.logger.error(f"Błąd rezerwacji: {e}")
             return {"success": False, "message": str(e)}
 
     def run_gui(self):
-        """Tworzy i uruchamia interfejs graficzny."""
-        print("🚀 Uruchamianie interfejsu graficznego...")
         try:
             from gui import MedicoverGUI
             gui = MedicoverGUI(self, self.config_dir)
             gui.run()
-        except ImportError:
-            print("GUI module not available in this environment")
+        except ImportError: pass
 
 def main():
-    """Główna funkcja aplikacji."""
     try:
         app = MedicoverApp(Path("config"))
-        print("✅ Aplikacja zainicjalizowana")
-    except Exception as e:
-        print(f"❌ Błąd krytyczny: {e}")
-        sys.exit(1)
+    except Exception as e: sys.exit(1)
