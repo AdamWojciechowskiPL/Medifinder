@@ -53,34 +53,30 @@ class MedicoverApp:
 
     def _filter_results_by_preferences(self, appointments: List[Dict[str, Any]], 
                                      preferred_days: List[int], 
-                                     time_range: Dict[str, str]) -> List[Dict[str, Any]]:
+                                     time_range: Dict[str, str],
+                                     day_time_ranges: Dict[str, Dict[str, str]] = None,
+                                     excluded_dates: List[date] = None) -> List[Dict[str, Any]]:
         """
-        Filtruje wyniki na podstawie preferowanych dni tygodnia i zakresu godzin.
+        Rozszerzone filtrowanie wyników.
         """
         if not appointments:
             return []
             
-        # Jeśli brak filtrów, zwróć wszystko
-        if not preferred_days and not time_range:
-            return appointments
-
         filtered: List[Dict[str, Any]] = []
         
-        # Parsowanie zakresu godzin
-        start_time: Optional[time] = None
-        end_time: Optional[time] = None
+        # Parsowanie globalnego zakresu godzin
+        global_start_time: Optional[time] = None
+        global_end_time: Optional[time] = None
         
         if time_range:
             try:
                 if time_range.get('start'):
-                    # Obsługa formatu HH:MM lub HH:MM:SS
                     parts = time_range['start'].split(':')
-                    start_time = time(int(parts[0]), int(parts[1]))
+                    global_start_time = time(int(parts[0]), int(parts[1]))
                 if time_range.get('end'):
                     parts = time_range['end'].split(':')
-                    end_time = time(int(parts[0]), int(parts[1]))
-            except Exception as e:
-                self.logger.error(f"Błąd parsowania zakresu godzin {time_range}: {e}")
+                    global_end_time = time(int(parts[0]), int(parts[1]))
+            except Exception: pass
 
         for apt in appointments:
             dt = self._parse_appointment_date_dt(apt)
@@ -88,17 +84,45 @@ class MedicoverApp:
                 filtered.append(apt) # Fail-open
                 continue
 
+            # 0. Sprawdź wykluczone daty (blacklist)
+            if excluded_dates:
+                apt_date = dt.date()
+                if apt_date in excluded_dates:
+                    continue
+
             # 1. Sprawdź dzień tygodnia (0=Pon, 6=Nd)
-            # Python weekday(): 0=Mon, 6=Sun. Zgadza się z formatem z frontendu.
-            if preferred_days and dt.weekday() not in preferred_days:
+            weekday = dt.weekday()
+            
+            # Jeśli user zaznaczył "dni tygodnia" w checkboxach, sprawdź to
+            if preferred_days and weekday not in preferred_days:
                 continue
 
-            # 2. Sprawdź godzinę
+            # 2. Sprawdź godziny
             t = dt.time()
-            if start_time and t < start_time:
-                continue
-            if end_time and t > end_time:
-                continue
+            
+            # Najpierw sprawdź czy dla tego dnia jest SPECIFICZNY zakres godzin
+            specific_range_found = False
+            if day_time_ranges and str(weekday) in day_time_ranges:
+                specific = day_time_ranges[str(weekday)]
+                try:
+                    s_parts = specific['start'].split(':')
+                    e_parts = specific['end'].split(':')
+                    s_time = time(int(s_parts[0]), int(s_parts[1]))
+                    e_time = time(int(e_parts[0]), int(e_parts[1]))
+                    
+                    if t < s_time or t > e_time:
+                        continue # Poza zakresem specyficznym dla dnia
+                    
+                    specific_range_found = True
+                except Exception:
+                    self.logger.warning(f"Błąd parsowania zakresu dla dnia {weekday}")
+
+            # Jeśli nie znaleziono specyficznego zakresu, użyj globalnego (jeśli zdefiniowany)
+            if not specific_range_found:
+                if global_start_time and t < global_start_time:
+                    continue
+                if global_end_time and t > global_end_time:
+                    continue
 
             filtered.append(apt)
 
@@ -127,7 +151,6 @@ class MedicoverApp:
 
         filtered: List[Dict[str, Any]] = []
         for apt in appointments:
-            # Używamy tej samej helper metody co wyżej, ale bierzemy tylko .date()
             dt = self._parse_appointment_date_dt(apt)
             if not dt:
                 filtered.append(apt)
@@ -149,7 +172,6 @@ class MedicoverApp:
         if not appointments:
             return
 
-        self.logger.debug(f"Aktualizowanie baz danych na podstawie {len(appointments)} wizyt...")
         doctors_updated = 0
         clinics_updated = 0
 
@@ -179,33 +201,22 @@ class MedicoverApp:
         )
 
     def _initialize_default_profile_and_client(self) -> None:
-        """
-        Wczytuje domyślny profil, jeśli istnieje. Jeśli nie ma żadnych profili,
-        aplikacja startuje bez aktywnego klienta.
-        """
         if self.profile_manager.profiles_path.exists():
              pass
         else:
             self.logger.warning("Nie znaleziono pliku profili.")
 
     def switch_profile(self, profile_name: str) -> bool:
-        """
-        Przełącza aktywny profil i reinicjalizuje klienta Medicover.
-        UWAGA: W wersji webowej ta metoda może być mniej używana, bo profil wybieramy per request.
-        """
         self.logger.warning("switch_profile called without user context - legacy method")
         return False
 
     def get_available_profiles(self, user_email: str) -> List[str]:
-        """Zwraca listę nazw wszystkich dostępnych profili dla danego użytkownika."""
         return [p.username for p in self.profile_manager.get_user_profiles(user_email)]
 
     def get_current_profile(self) -> Optional[str]:
-        """Zwraca nazwę aktualnie aktywnego profilu."""
         return self.current_profile
     
     def add_profile(self, user_email: str, login: str, password: str, name: str, is_child_account: bool = False) -> bool:
-        """Dodaje nowy profil użytkownika."""
         return self.profile_manager.add_profile(user_email, login, password, name, is_child_account)
 
     def search_appointments(self, user_email: str = None, profile: str = None, **kwargs) -> List[Dict[str, Any]]:
@@ -258,11 +269,26 @@ class MedicoverApp:
             # 1. Filtrowanie po zakresie dat (serwerowy fallback)
             filtered = self._filter_results_by_date_range(found, start_date, end_date)
             
-            # 2. Filtrowanie po preferencjach (dni tygodnia, godziny)
+            # 2. Filtrowanie po preferencjach (dni tygodnia, godziny, wykluczenia)
             preferred_days = kwargs.get('preferred_days')
             time_range = kwargs.get('time_range')
+            day_time_ranges = kwargs.get('day_time_ranges')
+            excluded_dates_raw = kwargs.get('excluded_dates')
             
-            filtered = self._filter_results_by_preferences(filtered, preferred_days, time_range)
+            excluded_dates = []
+            if excluded_dates_raw:
+                try:
+                    excluded_dates = [date.fromisoformat(d) for d in excluded_dates_raw]
+                except Exception as e:
+                    self.logger.warning(f"Błąd parsowania excluded_dates: {e}")
+
+            filtered = self._filter_results_by_preferences(
+                filtered, 
+                preferred_days, 
+                time_range,
+                day_time_ranges,
+                excluded_dates
+            )
 
             if filtered:
                 self._update_data_from_appointments(filtered)
@@ -276,7 +302,6 @@ class MedicoverApp:
     def book_appointment(self, user_email: str, profile: str, appointment_id: Any, booking_string: str = None) -> Dict[str, Any]:
         """
         Publiczna metoda do rezerwacji wizyty.
-        Obsługuje przekazywanie bookingString, który jest wymagany przez API Medicover.
         """
         if not user_email or not profile:
              return {"success": False, "message": "Brak danych profilu"}
