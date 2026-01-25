@@ -176,6 +176,7 @@ class MedicoverApp:
                     self.logger.debug(f"Odrzucono wizytę (Global End): {t} > {global_end_time}")
                     continue
 
+            self.logger.debug(f"Zaakceptowano wizytę: {dt}")
             filtered.append(apt)
 
         return filtered
