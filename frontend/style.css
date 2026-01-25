@@ -153,7 +153,7 @@ body {
 
 .date-range input, .time-range input {
     flex: 1; /* Allow inputs to shrink/grow */
-    min-width: 120px; /* Give inputs a minimum width */
+    min-width: 0; /* Changed from 120px to 0 to prevent overflow */
 }
 
 .time-range span, .date-range span {
@@ -608,6 +608,7 @@ input:checked + .slider:before { transform: translateX(20px); }
     
     .date-range input, .time-range input {
         width: 100%;
+        max-width: 100%; /* Ensure inputs don't overflow */
     }
     
     .time-range span, .date-range span {
