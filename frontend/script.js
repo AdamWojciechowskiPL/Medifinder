@@ -69,6 +69,20 @@ function formatLocalTime(utcDateString) {
     });
 }
 
+function getDateRangeFromUI() {
+    const dFromEl = document.getElementById('dateFrom');
+    const dToEl = document.getElementById('dateTo');
+    const dateFrom = dFromEl ? (dFromEl.value || null) : null;
+    const dateTo = dToEl ? (dToEl.value || null) : null;
+
+    // Validate format & order (inputs are type=date => yyyy-mm-dd)
+    if (dateFrom && dateTo && dateFrom > dateTo) {
+        return { valid: false, dateFrom, dateTo };
+    }
+
+    return { valid: true, dateFrom, dateTo };
+}
+
 // =========================
 // INIT & AUTH
 // =========================
@@ -87,6 +101,12 @@ document.addEventListener('DOMContentLoaded', () => {
     // Cyclic Check Listeners - Now controls backend scheduler
     document.getElementById('enableAutoCheck').addEventListener('change', toggleBackendScheduler);
     document.getElementById('checkInterval').addEventListener('change', updateSchedulerInterval);
+
+    // Dates change => restart scheduler if running (so it respects dateFrom/dateTo)
+    const dFrom = document.getElementById('dateFrom');
+    const dTo = document.getElementById('dateTo');
+    if (dFrom) dFrom.addEventListener('change', updateSchedulerInterval);
+    if (dTo) dTo.addEventListener('change', updateSchedulerInterval);
     
     // Auto-booking toggle listener - restarts scheduler if running
     document.getElementById('autoBook').addEventListener('change', handleAutoBookToggle);
@@ -245,7 +265,6 @@ async function loadLastSchedulerResults() {
         
         if (data.success && data.data && data.data.appointments) {
             const results = data.data;
-            // console.log(`📊 Załadowano ${results.count} ostatnich wyników z ${results.timestamp}`);
             
             // Renderuj wyniki
             searchResults = results.appointments;
@@ -323,8 +342,6 @@ function handleSpecialtyChange() {
     
     // Filter selection to only valid doctors for this specialty
     const validIds = new Set(filteredDocs.map(d => d.id));
-    // Important: We want to keep selected doctors IF they are in the new valid list
-    // BUT when restoring from state, selectedDoctors might contain IDs that are valid.
     selectedDoctors = new Set([...selectedDoctors].filter(id => validIds.has(id)));
     
     renderMultiSelect('doctorsList', filteredDocs, selectedDoctors, 'doctor');
@@ -464,6 +481,14 @@ async function toggleBackendScheduler() {
         checkbox.checked = false;
         return;
     }
+
+    // --- VALIDATION: Dates range ---
+    const dr = getDateRangeFromUI();
+    if (enabled && !dr.valid) {
+        showToast('Nieprawidłowy zakres dat: data "od" jest późniejsza niż "do"', 'error');
+        checkbox.checked = false;
+        return;
+    }
     // ---------------------------------------------------
     
     if (enabled) {
@@ -505,6 +530,13 @@ async function startBackendScheduler() {
         document.getElementById('enableAutoCheck').checked = false;
         return;
     }
+
+    const dr = getDateRangeFromUI();
+    if (!dr.valid) {
+        showToast('Nieprawidłowy zakres dat: data "od" jest późniejsza niż "do"', 'error');
+        document.getElementById('enableAutoCheck').checked = false;
+        return;
+    }
     // ------------------------
     
     const preferredDays = Array.from(document.querySelectorAll('#weekdaysContainer input:checked'))
@@ -522,6 +554,8 @@ async function startBackendScheduler() {
         preferred_days: preferredDays,
         time_range: { start: hFrom, end: hTo },
         excluded_dates: [],
+        start_date: dr.dateFrom,
+        end_date: dr.dateTo,
         interval_minutes: intervalMin,
         auto_book: autoBook
     };
@@ -650,11 +684,6 @@ async function checkSchedulerStatus() {
                 
                 // Update auto-book status
                 const autoBookStatusEl = document.getElementById('autoBookStatus');
-                
-                // Sync checkbox state if needed (careful not to loop)
-                // document.getElementById('autoBook').checked = status.auto_book; 
-                // Don't auto-update checkbox from backend status blindly to avoid confusing user while they toggle
-                
                 if (status.auto_book) {
                     autoBookStatusEl.textContent = 'Włączona';
                     autoBookStatusEl.style.color = 'var(--success)';
@@ -770,6 +799,12 @@ async function searchAppointments(isBackground = false) {
         if (!isBackground) showToast('Wybierz specjalność (wymagane)', 'error');
         return [];
     }
+
+    const dr = getDateRangeFromUI();
+    if (!dr.valid) {
+        if (!isBackground) showToast('Nieprawidłowy zakres dat: data "od" jest późniejsza niż "do"', 'error');
+        return [];
+    }
     // ------------------------
 
     const preferredDays = Array.from(document.querySelectorAll('#weekdaysContainer input:checked'))
@@ -784,7 +819,9 @@ async function searchAppointments(isBackground = false) {
         clinic_ids: Array.from(selectedClinics),
         preferred_days: preferredDays,
         time_range: { start: hFrom, end: hTo },
-        excluded_dates: [] 
+        excluded_dates: [],
+        start_date: dr.dateFrom,
+        end_date: dr.dateTo
     };
 
     const btn = document.getElementById('searchBtn');
@@ -982,9 +1019,6 @@ function resetFilters() {
     document.querySelectorAll('#weekdaysContainer input').forEach(cb => cb.checked = true);
     if (document.getElementById('hourFrom')) document.getElementById('hourFrom').value = 4;
     if (document.getElementById('hourTo')) document.getElementById('hourTo').value = 19;
-    
-    // Clear storage on reset? Or keep it? Usually reset means reset UI.
-    // I won't clear localStorage here, user might want to clear filters but not lose history until next search.
     
     showToast('Filtry wyczyszczone', 'success');
 }
