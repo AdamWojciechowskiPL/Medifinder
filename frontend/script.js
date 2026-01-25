@@ -1,5 +1,4 @@
 // Medifinder Web - Desktop Logic Replica
-// Ustawienie na pusty ciąg znaków, ponieważ teraz frontend jest serwowany z tej samej domeny co backend
 const API_URL = '';
 const AUTH_URL = '/auth';
 
@@ -13,6 +12,11 @@ let selectedClinics = new Set();
 let selectedAppointment = null;
 let searchResults = [];
 
+// Cyclic Check State
+let cyclicIntervalId = null;
+let countdownIntervalId = null;
+let nextCheckTime = null;
+
 // =========================
 // INIT & AUTH
 // =========================
@@ -23,10 +27,14 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // Event Listeners for UI
     document.getElementById('specialtySelect').addEventListener('change', handleSpecialtyChange);
-    document.getElementById('searchBtn').addEventListener('click', searchAppointments);
+    document.getElementById('searchBtn').addEventListener('click', () => searchAppointments(false));
     document.getElementById('resetBtn').addEventListener('click', resetFilters);
     document.getElementById('bookSelectedBtn').addEventListener('click', bookSelected);
     document.getElementById('exportBtn').addEventListener('click', exportResults);
+    
+    // Cyclic Check Listeners
+    document.getElementById('enableAutoCheck').addEventListener('change', toggleCyclicCheck);
+    document.getElementById('checkInterval').addEventListener('change', updateCheckInterval);
 });
 
 async function checkAuth() {
@@ -34,10 +42,7 @@ async function checkAuth() {
         const resp = await fetch(`${AUTH_URL}/me`, { credentials: 'include' });
         const data = await resp.json();
         
-        console.log('Auth check response:', data);
-
         if (data.authenticated) {
-            console.log('User is authenticated, updating UI...');
             document.getElementById('loginOverlay').style.display = 'none';
             document.getElementById('appContent').classList.remove('hidden');
             document.getElementById('userLabel').textContent = data.user.name || data.user.email;
@@ -48,7 +53,6 @@ async function checkAuth() {
             
             loadProfiles();
         } else {
-            console.log('User is NOT authenticated');
             document.getElementById('loginOverlay').style.display = 'flex';
         }
     } catch (e) { 
@@ -81,19 +85,16 @@ async function loadProfiles() {
 
 async function loadDictionaries() {
     try {
-        // 1. Specialties
         const specResp = await fetch(`${API_URL}/api/v1/dictionaries/specialties?profile=${currentProfile}`, { credentials: 'include' });
         const specData = await specResp.json();
         allSpecialties = specData.data || [];
         renderSpecialties();
 
-        // 2. Doctors
         const docResp = await fetch(`${API_URL}/api/v1/dictionaries/doctors`, { credentials: 'include' });
         const docData = await docResp.json();
         allDoctors = docData.data || [];
         renderMultiSelect('doctorsList', allDoctors, selectedDoctors, 'doctor');
 
-        // 3. Clinics
         const clinicResp = await fetch(`${API_URL}/api/v1/dictionaries/clinics`, { credentials: 'include' });
         const clinicData = await clinicResp.json();
         allClinics = clinicData.data || [];
@@ -108,7 +109,6 @@ async function loadDictionaries() {
 // =========================
 function updateProfileUI() {
     document.getElementById('currentProfileLabel').textContent = `${currentProfile}`;
-    // Re-render list in modal
     const list = document.getElementById('profilesList');
     if (list) {
         list.innerHTML = profiles.map(p => 
@@ -124,7 +124,7 @@ function switchProfile(name) {
     currentProfile = name;
     updateProfileUI();
     toggleProfilesModal();
-    loadDictionaries(); // Reload specialties (might differ for child/adult)
+    loadDictionaries();
 }
 
 function renderSpecialties() {
@@ -137,18 +137,15 @@ function renderSpecialties() {
 function handleSpecialtyChange() {
     const val = document.getElementById('specialtySelect').value;
     if (!val) {
-        // Reset doctors filter -> show all
         renderMultiSelect('doctorsList', allDoctors, selectedDoctors, 'doctor');
         return;
     }
 
     const specIds = val.split(',').map(Number);
-    // Filter doctors who have at least one matching specialty ID
     const filteredDocs = allDoctors.filter(d => 
         d.specialty_ids.some(sid => specIds.includes(sid))
     );
     
-    // Clear selection of doctors not in new list
     const validIds = new Set(filteredDocs.map(d => d.id));
     selectedDoctors = new Set([...selectedDoctors].filter(id => validIds.has(id)));
     
@@ -156,7 +153,6 @@ function handleSpecialtyChange() {
     updateTriggerLabel('doctorsTrigger', selectedDoctors, 'Lekarze');
 }
 
-// Multi-Select Renderer
 function renderMultiSelect(elementId, items, selectionSet, type) {
     const container = document.getElementById(elementId);
     if (!container) return;
@@ -169,15 +165,13 @@ function renderMultiSelect(elementId, items, selectionSet, type) {
         </div>`;
     }).join('');
     
-    // Update label immediately
-    const label = type === 'doctor' ? 'Lekarze' : 'Placówki';
     const triggerId = type === 'doctor' ? 'doctorsTrigger' : 'clinicsTrigger';
+    const label = type === 'doctor' ? 'Lekarze' : 'Placówki';
     updateTriggerLabel(triggerId, selectionSet, label);
 }
 
 function toggleSelection(type, id, element) {
     const set = type === 'doctor' ? selectedDoctors : selectedClinics;
-    // Cast ID to correct type (usually int from backend, but string in HTML)
     id = parseInt(id); 
 
     if (set.has(id)) {
@@ -188,8 +182,8 @@ function toggleSelection(type, id, element) {
         element.querySelector('input').checked = true;
     }
     
-    const label = type === 'doctor' ? 'Lekarze' : 'Placówki';
     const triggerId = type === 'doctor' ? 'doctorsTrigger' : 'clinicsTrigger';
+    const label = type === 'doctor' ? 'Lekarze' : 'Placówki';
     updateTriggerLabel(triggerId, set, label);
 }
 
@@ -210,8 +204,6 @@ function clearSelection(listId) {
     const baseLabel = type === 'doctor' ? 'Lekarze' : 'Placówki';
     
     updateTriggerLabel(triggerId, set, baseLabel);
-    
-    // Uncheck all inputs
     document.querySelectorAll(`#${listId} input`).forEach(cb => cb.checked = false);
 }
 
@@ -219,7 +211,6 @@ function toggleDropdown(id) {
     const el = document.getElementById(id);
     if (!el) return;
     const wasOpen = el.classList.contains('open');
-    // Close all others
     document.querySelectorAll('.custom-dropdown').forEach(d => d.classList.remove('open'));
     if (!wasOpen) el.classList.add('open');
 }
@@ -233,7 +224,6 @@ function filterDropdown(input, listId) {
     }
 }
 
-// Weekdays Init
 function initWeekdays() {
     const days = ['Pon', 'Wt', 'Śr', 'Czw', 'Pt', 'Sob', 'Nd'];
     const container = document.getElementById('weekdaysContainer');
@@ -241,7 +231,7 @@ function initWeekdays() {
     
     container.innerHTML = days.map((d, i) => `
         <label class="weekday-check">
-            <input type="checkbox" checked value="${i+1}"> ${d}
+            <input type="checkbox" checked value="${i}"> ${d}
         </label>
     `).join('');
 }
@@ -260,22 +250,120 @@ function setDefaultDates() {
 }
 
 // =========================
-// SEARCH
+// SEARCH & CYCLIC LOGIC
 // =========================
-async function searchAppointments() {
-    if (!currentProfile) { showToast('Brak wybranego profilu', 'error'); return; }
+
+function toggleCyclicCheck() {
+    const enabled = document.getElementById('enableAutoCheck').checked;
+    if (enabled) {
+        startCyclicCheck();
+    } else {
+        stopCyclicCheck();
+    }
+}
+
+function updateCheckInterval() {
+    // If running, restart to apply new interval
+    if (cyclicIntervalId) {
+        startCyclicCheck();
+    }
+}
+
+function startCyclicCheck() {
+    stopCyclicCheck(); // Clear existing
+    
+    const intervalMin = parseInt(document.getElementById('checkInterval').value) || 1;
+    const intervalMs = intervalMin * 60 * 1000;
+    
+    document.getElementById('autoCheckStatus').textContent = `Włączone (co ${intervalMin} min)`;
+    document.getElementById('autoCheckStatus').style.color = 'green';
+    
+    // First run immediately
+    runCyclicTask();
+    
+    // Schedule next
+    cyclicIntervalId = setInterval(runCyclicTask, intervalMs);
+    
+    // Countdown logic
+    nextCheckTime = new Date(Date.now() + intervalMs);
+    startCountdown();
+}
+
+function stopCyclicCheck() {
+    if (cyclicIntervalId) clearInterval(cyclicIntervalId);
+    if (countdownIntervalId) clearInterval(countdownIntervalId);
+    cyclicIntervalId = null;
+    countdownIntervalId = null;
+    nextCheckTime = null;
+    
+    document.getElementById('enableAutoCheck').checked = false;
+    document.getElementById('autoCheckStatus').textContent = "Wyłączone";
+    document.getElementById('autoCheckStatus').style.color = 'black';
+}
+
+function startCountdown() {
+    if (countdownIntervalId) clearInterval(countdownIntervalId);
+    
+    const statusEl = document.getElementById('autoCheckStatus');
+    
+    countdownIntervalId = setInterval(() => {
+        if (!nextCheckTime) return;
+        
+        const now = new Date();
+        const diff = nextCheckTime - now;
+        
+        if (diff <= 0) {
+            statusEl.textContent = "Sprawdzanie...";
+        } else {
+            const min = Math.floor(diff / 60000);
+            const sec = Math.floor((diff % 60000) / 1000);
+            statusEl.textContent = `Następne za ${min}:${sec.toString().padStart(2, '0')}`;
+        }
+    }, 1000);
+}
+
+async function runCyclicTask() {
+    console.log("Running cyclic task...");
+    
+    // If auto-book is enabled, check if we found something relevant
+    const autoBookEnabled = document.getElementById('autoBook').checked;
+    
+    // Perform search
+    const results = await searchAppointments(true); // isBackground = true
+    
+    if (autoBookEnabled && results && results.length > 0) {
+        // Try to book the first one
+        console.log("Auto-book enabled, booking first result...");
+        const success = await performBooking(results[0], true); // silent = true
+        
+        if (success) {
+            console.log("Auto-booking successful! Stopping cyclic check.");
+            stopCyclicCheck();
+            showToast('✅ Sukces! Automatycznie zarezerwowano wizytę.', 'success');
+            // Play sound notification?
+            try { new Audio('/notification.mp3').play(); } catch(e){}
+        }
+    }
+    
+    // Reset timer for next run
+    const intervalMin = parseInt(document.getElementById('checkInterval').value) || 1;
+    nextCheckTime = new Date(Date.now() + intervalMin * 60 * 1000);
+}
+
+
+async function searchAppointments(isBackground = false) {
+    if (!currentProfile) { showToast('Brak wybranego profilu', 'error'); return []; }
 
     const specVal = document.getElementById('specialtySelect').value;
     
+    // Fix: Use index 0-6 for Python weekday compatibility if needed, or stick to ISO
+    // In desktop: 0=Mon, 6=Sun. HTML values: 0-6
     const preferredDays = Array.from(document.querySelectorAll('#weekdaysContainer input:checked'))
         .map(cb => parseInt(cb.value));
 
-    // Time range logic: Desktop uses simple hours 4-19
     const hFrom = document.getElementById('hourFrom').value.padStart(2, '0') + ":00";
     const hTo = document.getElementById('hourTo').value.padStart(2, '0') + ":00";
     const dFrom = document.getElementById('dateFrom').value;
-    
-    // Prosta obsługa daty 'excluded' - na razie pusta, można rozwinąć
     
     const payload = {
         profile: currentProfile,
@@ -288,8 +376,10 @@ async function searchAppointments() {
     };
 
     const btn = document.getElementById('searchBtn');
-    btn.textContent = 'Szukam...';
-    btn.disabled = true;
+    if (!isBackground) {
+        btn.textContent = 'Szukam...';
+        btn.disabled = true;
+    }
 
     try {
         const resp = await fetch(`${API_URL}/api/v1/appointments/search`, {
@@ -303,16 +393,21 @@ async function searchAppointments() {
         if (data.success) {
             searchResults = data.data;
             renderResults();
-            showToast(`Znaleziono: ${searchResults.length}`, 'success');
+            if (!isBackground) showToast(`Znaleziono: ${searchResults.length}`, 'success');
+            return searchResults;
         } else {
-            showToast('Błąd: ' + (data.error || data.message), 'error');
+            if (!isBackground) showToast('Błąd: ' + (data.error || data.message), 'error');
+            return [];
         }
     } catch (e) {
-        showToast('Błąd połączenia', 'error');
+        if (!isBackground) showToast('Błąd połączenia', 'error');
         console.error(e);
+        return [];
     } finally {
-        btn.textContent = 'Wyszukaj';
-        btn.disabled = false;
+        if (!isBackground) {
+            btn.textContent = 'Wyszukaj';
+            btn.disabled = false;
+        }
     }
 }
 
@@ -327,12 +422,10 @@ function renderResults() {
     }
 
     searchResults.forEach((apt, index) => {
-        // EXACT REPLICA OF DESKTOP LOGIC: Uses 'appointmentDate' field
         let dateObj = null;
         const datetime_str = apt.appointmentDate || ""; 
         
         if (datetime_str) {
-             // Handle ISO string which might have 'Z' or offset
              const clean_str = datetime_str.replace('Z', '+00:00');
              dateObj = new Date(clean_str);
         }
@@ -340,7 +433,6 @@ function renderResults() {
         const dateStr = (dateObj && !isNaN(dateObj)) ? dateObj.toLocaleDateString('pl-PL') : 'Błąd daty';
         const timeStr = (dateObj && !isNaN(dateObj)) ? dateObj.toLocaleTimeString('pl-PL', {hour:'2-digit', minute:'2-digit'}) : '--:--';
         
-        // Extract names similar to desktop
         const doctorName = apt.doctor && apt.doctor.name ? apt.doctor.name : "Nieznany lekarz";
         const specialtyName = apt.specialty && apt.specialty.name ? apt.specialty.name : "Nieznana specjalność";
         const clinicName = apt.clinic && apt.clinic.name ? apt.clinic.name : "Nieznana placówka";
@@ -370,29 +462,30 @@ function selectRow(tr, apt) {
 // =========================
 async function bookSelected() {
     if (!selectedAppointment) return;
-    
-    const docName = selectedAppointment.doctor && selectedAppointment.doctor.name ? selectedAppointment.doctor.name : "Nieznany";
+    await performBooking(selectedAppointment, false);
+}
+
+async function performBooking(appointment, silent = false) {
+    const docName = appointment.doctor && appointment.doctor.name ? appointment.doctor.name : "Nieznany";
     
     let dateObj = null;
-    const datetime_str = selectedAppointment.appointmentDate || "";
+    const datetime_str = appointment.appointmentDate || "";
     if (datetime_str) {
          const clean_str = datetime_str.replace('Z', '+00:00');
          dateObj = new Date(clean_str);
     }
-    
-    const dateVal = (dateObj && !isNaN(dateObj)) 
-        ? dateObj.toLocaleString('pl-PL') 
-        : "Nieznana data";
+    const dateVal = (dateObj && !isNaN(dateObj)) ? dateObj.toLocaleString('pl-PL') : "Nieznana data";
 
-    if (!confirm(`Czy na pewno chcesz zarezerwować wizytę?\n\nLekarz: ${docName}\nData: ${dateVal}`)) return;
+    if (!silent) {
+        if (!confirm(`Czy na pewno chcesz zarezerwować wizytę?\n\nLekarz: ${docName}\nData: ${dateVal}`)) return false;
+    }
 
-    // Use bookingString which is MANDATORY for client
-    const bookingString = selectedAppointment.bookingString;
-    const aptId = selectedAppointment.appointmentId || selectedAppointment.id;
+    const bookingString = appointment.bookingString;
+    const aptId = appointment.appointmentId || appointment.id;
 
     if (!bookingString) {
-        showToast('Błąd: Wybrana wizyta nie posiada identyfikatora rezerwacji (bookingString)', 'error');
-        return;
+        if (!silent) showToast('Błąd: Brak bookingString', 'error');
+        return false;
     }
 
     try {
@@ -403,23 +496,26 @@ async function bookSelected() {
             body: JSON.stringify({
                 profile: currentProfile,
                 appointment_id: aptId,
-                booking_string: bookingString // SENDING REQUIRED FIELD
+                booking_string: bookingString
             })
         });
         const data = await resp.json();
         if (data.success) {
-            showToast('Zarezerwowano pomyślnie!', 'success');
-            // Remove from list using IDs if possible, or object ref
-            searchResults = searchResults.filter(a => a !== selectedAppointment);
+            if (!silent) showToast('Zarezerwowano pomyślnie!', 'success');
+            // Remove booked appointment
+            searchResults = searchResults.filter(a => a !== appointment);
             renderResults();
             selectedAppointment = null;
             document.getElementById('bookSelectedBtn').disabled = true;
+            return true;
         } else {
-            showToast('Błąd rezerwacji: ' + (data.message || data.error), 'error');
+            if (!silent) showToast('Błąd rezerwacji: ' + (data.message || data.error), 'error');
+            return false;
         }
     } catch (e) {
-        showToast('Błąd krytyczny', 'error');
+        if (!silent) showToast('Błąd krytyczny', 'error');
         console.error(e);
+        return false;
     }
 }
 
@@ -459,12 +555,11 @@ function resetFilters() {
     const specSel = document.getElementById('specialtySelect');
     if (specSel) {
         specSel.value = "";
-        handleSpecialtyChange(); // Resets doctors
+        handleSpecialtyChange(); 
     }
     clearSelection('doctorsList');
     clearSelection('clinicsList');
     setDefaultDates();
-    // Reset checkboxes
     document.querySelectorAll('#weekdaysContainer input').forEach(cb => cb.checked = true);
     if (document.getElementById('hourFrom')) document.getElementById('hourFrom').value = 4;
     if (document.getElementById('hourTo')) document.getElementById('hourTo').value = 19;
@@ -489,7 +584,6 @@ function toggleProfilesModal() {
     else el.classList.add('hidden');
 }
 
-// Obsługa dodawania profilu
 const addProfForm = document.getElementById('addProfileForm');
 if (addProfForm) {
     addProfForm.addEventListener('submit', async (e) => {
@@ -497,7 +591,6 @@ if (addProfForm) {
         const name = document.getElementById('newProfileName').value;
         const login = document.getElementById('newProfileLogin').value;
         const pass = document.getElementById('newProfilePass').value;
-        // Read checkbox state
         const isChild = document.getElementById('newProfileIsChild').checked;
 
         try {
@@ -509,7 +602,7 @@ if (addProfForm) {
                     name, 
                     login, 
                     password: pass,
-                    is_child_account: isChild // Send to backend
+                    is_child_account: isChild 
                 })
             });
             const data = await resp.json();
