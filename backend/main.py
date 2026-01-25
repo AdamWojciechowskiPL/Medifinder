@@ -262,6 +262,7 @@ def scheduler_start():
                 'preferred_days': data.get('preferred_days', []),
                 'time_range': data.get('time_range'),
                 'excluded_dates': data.get('excluded_dates', []),
+                'day_time_ranges': data.get('day_time_ranges', {}), # NOWE
                 'start_date': data.get('start_date'),
                 'end_date': data.get('end_date')
             },
@@ -433,8 +434,8 @@ def search_appointments():
             clinic_ids=data.get('clinic_ids'),
             preferred_days=data.get('preferred_days', []),
             time_range=data.get('time_range'),
-            day_time_ranges=data.get('day_time_ranges'),
-            excluded_dates=[date.fromisoformat(d) for d in data.get('excluded_dates', [])],
+            day_time_ranges=data.get('day_time_ranges', {}), # NOWE
+            excluded_dates=data.get('excluded_dates', []), # NOWE
             start_date=data.get('start_date'),
             end_date=data.get('end_date'),
             headless=True
