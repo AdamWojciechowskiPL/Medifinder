@@ -1,4 +1,4 @@
-// Medifinder Web - Desktop Logic Replica
+// Medifinder Web - Backend Scheduler Integration
 const API_URL = '';
 const AUTH_URL = '/auth';
 
@@ -12,10 +12,8 @@ let selectedClinics = new Set();
 let selectedAppointment = null;
 let searchResults = [];
 
-// Cyclic Check State
-let cyclicIntervalId = null;
-let countdownIntervalId = null;
-let nextCheckTime = null;
+// Status polling interval
+let statusPollingInterval = null;
 
 // =========================
 // INIT & AUTH
@@ -32,9 +30,9 @@ document.addEventListener('DOMContentLoaded', () => {
     document.getElementById('bookSelectedBtn').addEventListener('click', bookSelected);
     document.getElementById('exportBtn').addEventListener('click', exportResults);
     
-    // Cyclic Check Listeners
-    document.getElementById('enableAutoCheck').addEventListener('change', toggleCyclicCheck);
-    document.getElementById('checkInterval').addEventListener('change', updateCheckInterval);
+    // Cyclic Check Listeners - Now controls backend scheduler
+    document.getElementById('enableAutoCheck').addEventListener('change', toggleBackendScheduler);
+    document.getElementById('checkInterval').addEventListener('change', updateSchedulerInterval);
 });
 
 async function checkAuth() {
@@ -75,6 +73,9 @@ async function loadProfiles() {
             currentProfile = profiles[0]; // Default to first
             updateProfileUI();
             loadDictionaries();
+            
+            // Check scheduler status for current profile
+            checkSchedulerStatus();
         } else {
             toggleProfilesModal(); // Force create profile
         }
@@ -125,6 +126,9 @@ function switchProfile(name) {
     updateProfileUI();
     toggleProfilesModal();
     loadDictionaries();
+    
+    // Check scheduler status for new profile
+    checkSchedulerStatus();
 }
 
 function renderSpecialties() {
@@ -250,131 +254,218 @@ function setDefaultDates() {
 }
 
 // =========================
-// SEARCH & CYCLIC LOGIC
+// BACKEND SCHEDULER CONTROL
 // =========================
 
-function toggleCyclicCheck() {
+async function toggleBackendScheduler() {
     const checkbox = document.getElementById('enableAutoCheck');
     const enabled = checkbox.checked;
     
     if (enabled) {
-        startCyclicCheck();
+        await startBackendScheduler();
     } else {
-        stopCyclicCheck();
+        await stopBackendScheduler();
     }
 }
 
-function updateCheckInterval() {
-    // If running, restart to apply new interval
-    if (cyclicIntervalId) {
-        startCyclicCheck();
+async function updateSchedulerInterval() {
+    // If scheduler is running, restart it with new interval
+    const checkbox = document.getElementById('enableAutoCheck');
+    if (checkbox.checked) {
+        await startBackendScheduler();
     }
 }
 
-function startCyclicCheck() {
-    stopCyclicCheck(); // Clear existing
+async function startBackendScheduler() {
+    if (!currentProfile) {
+        showToast('Wybierz profil przed uruchomieniem', 'error');
+        document.getElementById('enableAutoCheck').checked = false;
+        return;
+    }
     
-    const intervalMin = parseInt(document.getElementById('checkInterval').value) || 1;
-    const intervalMs = intervalMin * 60 * 1000;
+    const specVal = document.getElementById('specialtySelect').value;
+    const preferredDays = Array.from(document.querySelectorAll('#weekdaysContainer input:checked'))
+        .map(cb => parseInt(cb.value));
+    const hFrom = document.getElementById('hourFrom').value.padStart(2, '0') + ":00";
+    const hTo = document.getElementById('hourTo').value.padStart(2, '0') + ":00";
+    const intervalMin = parseInt(document.getElementById('checkInterval').value) || 5;
+    const autoBook = document.getElementById('autoBook').checked;
     
-    // Update UI to show active state
-    const checkbox = document.getElementById('enableAutoCheck');
-    checkbox.checked = true; // Explicitly set checkbox state
+    const payload = {
+        profile: currentProfile,
+        specialty_ids: specVal ? specVal.split(',').map(Number) : [],
+        doctor_ids: Array.from(selectedDoctors),
+        clinic_ids: Array.from(selectedClinics),
+        preferred_days: preferredDays,
+        time_range: { start: hFrom, end: hTo },
+        excluded_dates: [],
+        interval_minutes: intervalMin,
+        auto_book: autoBook
+    };
     
-    const statusEl = document.getElementById('autoCheckStatus');
-    statusEl.textContent = `Włączone (co ${intervalMin} min)`;
-    statusEl.style.color = 'green';
-    statusEl.style.fontWeight = 'bold';
-    
-    // First run immediately
-    runCyclicTask();
-    
-    // Schedule next
-    cyclicIntervalId = setInterval(runCyclicTask, intervalMs);
-    
-    // Countdown logic
-    nextCheckTime = new Date(Date.now() + intervalMs);
-    startCountdown();
-}
-
-function stopCyclicCheck() {
-    if (cyclicIntervalId) clearInterval(cyclicIntervalId);
-    if (countdownIntervalId) clearInterval(countdownIntervalId);
-    cyclicIntervalId = null;
-    countdownIntervalId = null;
-    nextCheckTime = null;
-    
-    // Update UI to show inactive state
-    const checkbox = document.getElementById('enableAutoCheck');
-    checkbox.checked = false; // Explicitly uncheck
-    
-    const statusEl = document.getElementById('autoCheckStatus');
-    statusEl.textContent = "Wyłączone";
-    statusEl.style.color = 'black';
-    statusEl.style.fontWeight = 'normal';
-}
-
-function startCountdown() {
-    if (countdownIntervalId) clearInterval(countdownIntervalId);
-    
-    const statusEl = document.getElementById('autoCheckStatus');
-    
-    countdownIntervalId = setInterval(() => {
-        if (!nextCheckTime) return;
+    try {
+        const resp = await fetch(`${API_URL}/api/v1/scheduler/start`, {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            credentials: 'include',
+            body: JSON.stringify(payload)
+        });
         
-        const now = new Date();
-        const diff = nextCheckTime - now;
+        const data = await resp.json();
         
-        if (diff <= 0) {
-            statusEl.textContent = "Sprawdzanie...";
-            statusEl.style.color = 'orange';
-        } else {
-            const min = Math.floor(diff / 60000);
-            const sec = Math.floor((diff % 60000) / 1000);
-            statusEl.textContent = `Następne za ${min}:${sec.toString().padStart(2, '0')}`;
+        if (data.success) {
+            showToast(`✅ Zadanie uruchomione (co ${intervalMin} min)`, 'success');
+            
+            // Update UI
+            document.getElementById('enableAutoCheck').checked = true;
+            const statusEl = document.getElementById('autoCheckStatus');
+            statusEl.textContent = `Włączone (co ${intervalMin} min)`;
             statusEl.style.color = 'green';
-        }
-    }, 1000);
-}
-
-async function runCyclicTask() {
-    console.log("[CYCLIC] Running cyclic task...");
-    
-    const autoBookEnabled = document.getElementById('autoBook').checked;
-    
-    // Perform search
-    const results = await searchAppointments(true); // isBackground = true
-    
-    if (autoBookEnabled && results && results.length > 0) {
-        console.log("[CYCLIC] Auto-book enabled, booking first result...");
-        const success = await performBooking(results[0], true); // silent = true
-        
-        if (success) {
-            console.log("[CYCLIC] Auto-booking successful! Stopping cyclic check.");
-            stopCyclicCheck();
-            showToast('✅ Sukces! Automatycznie zarezerwowano wizytę.', 'success');
+            statusEl.style.fontWeight = 'bold';
             
             // Update auto-book status
             const autoBookStatusEl = document.getElementById('autoBookStatus');
-            if (autoBookStatusEl) {
-                autoBookStatusEl.textContent = "Wykonano";
+            if (autoBook) {
+                autoBookStatusEl.textContent = 'Włączona';
                 autoBookStatusEl.style.color = 'green';
                 autoBookStatusEl.style.fontWeight = 'bold';
+            } else {
+                autoBookStatusEl.textContent = 'Wyłączona';
+                autoBookStatusEl.style.color = 'black';
+                autoBookStatusEl.style.fontWeight = 'normal';
             }
             
-            // Disable auto-book checkbox
-            document.getElementById('autoBook').checked = false;
-            
-            // Play notification sound
-            try { new Audio('/notification.mp3').play(); } catch(e){}
+            // Start polling for status updates
+            startStatusPolling();
+        } else {
+            showToast('Błąd: ' + (data.error || data.message), 'error');
+            document.getElementById('enableAutoCheck').checked = false;
         }
+    } catch (e) {
+        showToast('Błąd połączenia z serwerem', 'error');
+        console.error(e);
+        document.getElementById('enableAutoCheck').checked = false;
     }
-    
-    // Reset timer for next run
-    const intervalMin = parseInt(document.getElementById('checkInterval').value) || 1;
-    nextCheckTime = new Date(Date.now() + intervalMin * 60 * 1000);
 }
 
+async function stopBackendScheduler() {
+    if (!currentProfile) return;
+    
+    try {
+        const resp = await fetch(`${API_URL}/api/v1/scheduler/stop`, {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            credentials: 'include',
+            body: JSON.stringify({ profile: currentProfile })
+        });
+        
+        const data = await resp.json();
+        
+        if (data.success) {
+            showToast('Zadanie zatrzymane', 'success');
+            
+            // Update UI
+            document.getElementById('enableAutoCheck').checked = false;
+            const statusEl = document.getElementById('autoCheckStatus');
+            statusEl.textContent = 'Wyłączone';
+            statusEl.style.color = 'black';
+            statusEl.style.fontWeight = 'normal';
+            
+            // Stop polling
+            stopStatusPolling();
+        } else {
+            showToast('Błąd zatrzymywania: ' + (data.error || data.message), 'error');
+        }
+    } catch (e) {
+        showToast('Błąd połączenia z serwerem', 'error');
+        console.error(e);
+    }
+}
+
+async function checkSchedulerStatus() {
+    if (!currentProfile) return;
+    
+    try {
+        const resp = await fetch(`${API_URL}/api/v1/scheduler/status?profile=${currentProfile}`, {
+            credentials: 'include'
+        });
+        
+        const data = await resp.json();
+        
+        if (data.success && data.data) {
+            const status = data.data;
+            
+            // Update UI based on backend status
+            if (status.active) {
+                document.getElementById('enableAutoCheck').checked = true;
+                
+                const statusEl = document.getElementById('autoCheckStatus');
+                const intervalMin = status.interval_minutes || 5;
+                
+                // Calculate time until next run
+                if (status.next_run) {
+                    const nextRun = new Date(status.next_run);
+                    const now = new Date();
+                    const diff = nextRun - now;
+                    
+                    if (diff > 0) {
+                        const min = Math.floor(diff / 60000);
+                        const sec = Math.floor((diff % 60000) / 1000);
+                        statusEl.textContent = `Następne za ${min}:${sec.toString().padStart(2, '0')}`;
+                    } else {
+                        statusEl.textContent = 'Sprawdzanie...';
+                    }
+                } else {
+                    statusEl.textContent = `Włączone (co ${intervalMin} min)`;
+                }
+                
+                statusEl.style.color = 'green';
+                statusEl.style.fontWeight = 'bold';
+                
+                // Update auto-book status
+                const autoBookStatusEl = document.getElementById('autoBookStatus');
+                if (status.auto_book) {
+                    autoBookStatusEl.textContent = 'Włączona';
+                    autoBookStatusEl.style.color = 'green';
+                    autoBookStatusEl.style.fontWeight = 'bold';
+                }
+                
+                // Start polling if not already running
+                if (!statusPollingInterval) {
+                    startStatusPolling();
+                }
+            } else {
+                // Inactive
+                document.getElementById('enableAutoCheck').checked = false;
+                document.getElementById('autoCheckStatus').textContent = 'Wyłączone';
+                document.getElementById('autoCheckStatus').style.color = 'black';
+                document.getElementById('autoCheckStatus').style.fontWeight = 'normal';
+            }
+        }
+    } catch (e) {
+        console.error('Error checking scheduler status:', e);
+    }
+}
+
+function startStatusPolling() {
+    // Poll every 5 seconds to update countdown
+    if (statusPollingInterval) clearInterval(statusPollingInterval);
+    
+    statusPollingInterval = setInterval(() => {
+        checkSchedulerStatus();
+    }, 5000);
+}
+
+function stopStatusPolling() {
+    if (statusPollingInterval) {
+        clearInterval(statusPollingInterval);
+        statusPollingInterval = null;
+    }
+}
+
+// =========================
+// SEARCH & APPOINTMENTS
+// =========================
 
 async function searchAppointments(isBackground = false) {
     if (!currentProfile) { 
@@ -383,10 +474,8 @@ async function searchAppointments(isBackground = false) {
     }
 
     const specVal = document.getElementById('specialtySelect').value;
-    
     const preferredDays = Array.from(document.querySelectorAll('#weekdaysContainer input:checked'))
         .map(cb => parseInt(cb.value));
-
     const hFrom = document.getElementById('hourFrom').value.padStart(2, '0') + ":00";
     const hTo = document.getElementById('hourTo').value.padStart(2, '0') + ":00";
     
@@ -527,7 +616,6 @@ async function performBooking(appointment, silent = false) {
         const data = await resp.json();
         if (data.success) {
             if (!silent) showToast('Zarezerwowano pomyślnie!', 'success');
-            // Remove booked appointment
             searchResults = searchResults.filter(a => a !== appointment);
             renderResults();
             selectedAppointment = null;
