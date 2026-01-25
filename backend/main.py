@@ -261,7 +261,9 @@ def scheduler_start():
                 'clinic_ids': data.get('clinic_ids', []),
                 'preferred_days': data.get('preferred_days', []),
                 'time_range': data.get('time_range'),
-                'excluded_dates': data.get('excluded_dates', [])
+                'excluded_dates': data.get('excluded_dates', []),
+                'start_date': data.get('start_date'),
+                'end_date': data.get('end_date')
             },
             interval_minutes=data.get('interval_minutes', 5),
             auto_book=data.get('auto_book', False)
@@ -433,6 +435,8 @@ def search_appointments():
             time_range=data.get('time_range'),
             day_time_ranges=data.get('day_time_ranges'),
             excluded_dates=[date.fromisoformat(d) for d in data.get('excluded_dates', [])],
+            start_date=data.get('start_date'),
+            end_date=data.get('end_date'),
             headless=True
         )
         return jsonify({'success': True, 'count': len(results), 'data': results}), 200
