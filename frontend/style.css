@@ -103,6 +103,7 @@ body {
     padding: 20px;
     box-shadow: var(--shadow);
     width: 100%; /* Ensure panels don't overflow */
+    min-width: 0; /* Prevent grid blowout */
 }
 
 .filters-panel h3 {
@@ -117,6 +118,7 @@ body {
 .form-group {
     margin-bottom: 16px;
     width: 100%; /* Ensure form groups don't overflow */
+    min-width: 0;
 }
 
 .form-group label {
@@ -152,8 +154,9 @@ body {
 }
 
 .date-range input, .time-range input {
-    flex: 1; /* Allow inputs to shrink/grow */
-    min-width: 0; /* Changed from 120px to 0 to prevent overflow */
+    flex: 1 1 120px; /* Allow wrapping if less than 120px */
+    min-width: 0; /* Prevent overflow */
+    max-width: 100%;
 }
 
 .time-range span, .date-range span {
@@ -582,7 +585,7 @@ input:checked + .slider:before { transform: translateX(20px); }
         flex-direction: column;
         gap: 16px;
         text-align: center;
-        padding: 20px;
+        padding: 16px;
     }
 
     .user-menu {
@@ -598,21 +601,33 @@ input:checked + .slider:before { transform: translateX(20px); }
     .main-grid {
         grid-template-columns: 1fr;
     }
+    
+    .filters-panel {
+        padding: 16px; /* Reduced padding on mobile */
+    }
 
     /* Fix Date/Time ranges wrapping */
     .date-range, .time-range {
         flex-direction: column;
-        align-items: flex-start;
+        align-items: stretch; /* Stretch to fill */
         gap: 6px;
     }
     
     .date-range input, .time-range input {
         width: 100%;
         max-width: 100%; /* Ensure inputs don't overflow */
+        flex: none; /* Disable flex scaling */
     }
     
     .time-range span, .date-range span {
         align-self: center; /* Center separator */
+        display: none; /* Hide separator in column mode for cleaner look */
+    }
+    
+    .time-range::before, .date-range::before {
+        /* Optional: Add "do" or "-" text using pseudo element if needed, 
+           but stacking usually implies "to" */
+        display: none; 
     }
 
     .scheduler-bar {
