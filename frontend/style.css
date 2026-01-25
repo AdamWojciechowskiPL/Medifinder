@@ -313,6 +313,7 @@ body {
     width: 18px;
     height: 18px;
     cursor: pointer;
+    flex-shrink: 0;
 }
 
 .dropdown-footer {
@@ -348,7 +349,13 @@ body {
     background: var(--light);
 }
 
-.weekday-check input:checked + label,
+.weekday-check input {
+    width: 16px;
+    height: 16px;
+    cursor: pointer;
+    flex-shrink: 0;
+}
+
 .weekday-check:has(input:checked) {
     border-color: var(--primary);
     background: rgba(79, 70, 229, 0.1);
@@ -618,6 +625,14 @@ body {
     padding: 4px 0;
 }
 
+/* Checkbox styling for better mobile support */
+input[type="checkbox"] {
+    width: 18px;
+    height: 18px;
+    cursor: pointer;
+    flex-shrink: 0;
+}
+
 /* Responsive Design */
 @media (max-width: 768px) {
     .container {
@@ -637,6 +652,18 @@ body {
 
     .panel {
         padding: 16px;
+    }
+
+    .panel-row {
+        flex-direction: row;
+        align-items: center;
+        gap: 8px;
+    }
+
+    .indent {
+        margin-left: 0;
+        padding-left: 12px;
+        width: 100%;
     }
 
     .search-grid {
@@ -663,6 +690,7 @@ body {
     #resultsSource {
         margin-left: 0;
         text-align: center;
+        width: 100%;
     }
 
     .modal-content {
@@ -671,12 +699,11 @@ body {
     }
 
     .weekdays-selector {
-        justify-content: center;
+        justify-content: flex-start;
     }
 
-    .panel-row {
-        flex-direction: column;
-        align-items: flex-start;
+    .weekday-check {
+        flex: 0 0 auto;
     }
 
     .results-table {
@@ -703,5 +730,15 @@ body {
     .weekday-check {
         padding: 4px 8px;
         font-size: 0.85rem;
+    }
+
+    .weekday-check input {
+        width: 14px;
+        height: 14px;
+    }
+
+    input[type="checkbox"] {
+        width: 16px;
+        height: 16px;
     }
 }

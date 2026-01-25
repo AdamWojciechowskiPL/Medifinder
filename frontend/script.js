@@ -22,8 +22,16 @@ let resultsPollingInterval = null;
 function utcToLocal(utcDateString) {
     if (!utcDateString) return null;
     
-    // Parse UTC date and convert to local timezone
-    const date = new Date(utcDateString);
+    // Ensure proper UTC parsing by adding 'Z' if not present
+    let dateStr = utcDateString;
+    if (!dateStr.endsWith('Z') && !dateStr.includes('+') && !dateStr.includes('T')) {
+        // If it's just a date string, treat as UTC
+        dateStr = dateStr + 'Z';
+    } else if (dateStr.includes('T') && !dateStr.endsWith('Z') && !dateStr.includes('+')) {
+        dateStr = dateStr + 'Z';
+    }
+    
+    const date = new Date(dateStr);
     return date;
 }
 
@@ -44,14 +52,21 @@ function formatLocalDate(utcDateString) {
     const date = utcToLocal(utcDateString);
     if (!date || isNaN(date)) return 'Błąd daty';
     
-    return date.toLocaleDateString('pl-PL');
+    return date.toLocaleDateString('pl-PL', {
+        day: '2-digit',
+        month: '2-digit',
+        year: 'numeric'
+    });
 }
 
 function formatLocalTime(utcDateString) {
     const date = utcToLocal(utcDateString);
     if (!date || isNaN(date)) return '--:--';
     
-    return date.toLocaleTimeString('pl-PL', {hour:'2-digit', minute:'2-digit'});
+    return date.toLocaleTimeString('pl-PL', {
+        hour:'2-digit',
+        minute:'2-digit'
+    });
 }
 
 // =========================
@@ -553,7 +568,7 @@ function updateSchedulerDetails(status) {
     
     // Ostatni błąd (KONWERSJA UTC -> LOCAL)
     if (status.last_error) {
-        const errTimeStr = formatLocalTime(status.last_error.timestamp);
+        const errTimeStr = formatLocalDateTime(status.last_error.timestamp);
         html += `<span style="color: var(--danger);">⚠️ Błąd: ${status.last_error.error.substring(0, 60)} (${errTimeStr})</span>`;
     }
     
