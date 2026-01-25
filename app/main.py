@@ -123,19 +123,22 @@ class MedicoverApp:
                     global_end_time = time(int(parts[0]), int(parts[1]))
             except Exception: pass
 
-        self.logger.info(f"Filtrowanie: {len(appointments)} wizyt. Excluded: {excluded_dates}, PrefDays: {preferred_days}")
+        self.logger.info(f"START Filtrowanie pref: wejście={len(appointments)}, Excluded={excluded_dates}, PrefDays={preferred_days}")
 
         for apt in appointments:
             dt = self._parse_appointment_date_dt(apt)
             if not dt:
+                self.logger.info("Odrzucono wizytę: Brak daty (dt is None)")
                 filtered.append(apt) # Fail-open
                 continue
+
+            self.logger.info(f"Przetwarzanie wizyty: {dt} (Dzień tyg: {dt.weekday()})")
 
             # 0. Sprawdź wykluczone daty (blacklist)
             if excluded_dates:
                 apt_date = dt.date()
                 if apt_date in excluded_dates:
-                    self.logger.info(f"Odrzucono wizytę (Excluded Date): {apt_date}")
+                    self.logger.info(f"-> Odrzucono (Excluded Date): {apt_date}")
                     continue
 
             # 1. Sprawdź dzień tygodnia (0=Pon, 6=Nd)
@@ -143,7 +146,7 @@ class MedicoverApp:
             
             # Jeśli user zaznaczył "dni tygodnia" w checkboxach, sprawdź to
             if preferred_days and weekday not in preferred_days:
-                self.logger.info(f"Odrzucono wizytę (Weekday): {weekday} not in {preferred_days}")
+                self.logger.info(f"-> Odrzucono (Weekday): {weekday} not in {preferred_days}")
                 continue
 
             # 2. Sprawdź godziny
@@ -160,7 +163,7 @@ class MedicoverApp:
                     e_time = time(int(e_parts[0]), int(e_parts[1]))
                     
                     if t < s_time or t > e_time:
-                        self.logger.info(f"Odrzucono wizytę (Specific Time): {t} outside {s_time}-{e_time}")
+                        self.logger.info(f"-> Odrzucono (Specific Time): {t} outside {s_time}-{e_time}")
                         continue # Poza zakresem specyficznym dla dnia
                     
                     specific_range_found = True
@@ -170,20 +173,23 @@ class MedicoverApp:
             # Jeśli nie znaleziono specyficznego zakresu, użyj globalnego (jeśli zdefiniowany)
             if not specific_range_found:
                 if global_start_time and t < global_start_time:
-                    self.logger.info(f"Odrzucono wizytę (Global Start): {t} < {global_start_time}")
+                    self.logger.info(f"-> Odrzucono (Global Start): {t} < {global_start_time}")
                     continue
                 if global_end_time and t > global_end_time:
-                    self.logger.info(f"Odrzucono wizytę (Global End): {t} > {global_end_time}")
+                    self.logger.info(f"-> Odrzucono (Global End): {t} > {global_end_time}")
                     continue
 
-            self.logger.info(f"Zaakceptowano wizytę: {dt}")
+            self.logger.info(f"-> ZAAKCEPTOWANO: {dt}")
             filtered.append(apt)
 
+        self.logger.info(f"KONIEC Filtrowanie pref: wyjście={len(filtered)}")
         return filtered
 
     def _filter_results_by_date_range(self, appointments: List[Dict[str, Any]], start_date: Optional[str], end_date: Optional[str]) -> List[Dict[str, Any]]:
         if not appointments:
             return appointments
+
+        self.logger.info(f"START Filtrowanie zakresu dat: wejście={len(appointments)}, Start={start_date}, End={end_date}")
 
         start = None
         end = None
@@ -225,11 +231,14 @@ class MedicoverApp:
             
             d = dt.date()
             if start and d < start:
+                # self.logger.info(f"-> Odrzucono (Too Early): {d} < {start}")
                 continue
             if end and d > end:
+                # self.logger.info(f"-> Odrzucono (Too Late): {d} > {end}")
                 continue
             filtered.append(apt)
 
+        self.logger.info(f"KONIEC Filtrowanie zakresu dat: wyjście={len(filtered)}")
         return filtered
         
     def _update_data_from_appointments(self, appointments: List[Dict[str, Any]]) -> None:
