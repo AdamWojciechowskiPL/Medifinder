@@ -37,91 +37,103 @@
         <main class="main-grid">
             <!-- Sidebar / Filters -->
             <aside class="filters-panel">
-                <h3>Filtry wyszukiwania</h3>
                 
-                <div class="form-group">
-                    <label>Specjalność</label>
-                    <select id="specialtySelect" class="form-control">
-                        <option value="">Ładowanie...</option>
-                    </select>
-                </div>
-
-                <div class="form-group">
-                    <label>Lekarze (<span id="doctorsCount">0</span>)</label>
-                    <div class="custom-dropdown" id="doctorsDropdown">
-                        <div class="dropdown-trigger" id="doctorsTrigger" onclick="toggleDropdown('doctorsDropdown')">Wybierz...</div>
-                        <div class="dropdown-content">
-                            <input type="text" class="search-input" placeholder="Szukaj..." onkeyup="filterDropdown(this, 'doctorsList')">
-                            <div class="items-list" id="doctorsList"></div>
-                            <div class="dropdown-actions">
-                                <button class="btn btn-xs" onclick="clearSelection('doctorsList')">Wyczyść</button>
-                                <button class="btn btn-xs btn-primary" onclick="toggleDropdown('doctorsDropdown')">OK</button>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-
-                <div class="form-group">
-                    <label>Placówki</label>
-                    <div class="custom-dropdown" id="clinicsDropdown">
-                        <div class="dropdown-trigger" id="clinicsTrigger" onclick="toggleDropdown('clinicsDropdown')">Wybierz...</div>
-                        <div class="dropdown-content">
-                            <input type="text" class="search-input" placeholder="Szukaj..." onkeyup="filterDropdown(this, 'clinicsList')">
-                            <div class="items-list" id="clinicsList"></div>
-                            <div class="dropdown-actions">
-                                <button class="btn btn-xs" onclick="clearSelection('clinicsList')">Wyczyść</button>
-                                <button class="btn btn-xs btn-primary" onclick="toggleDropdown('clinicsDropdown')">OK</button>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-
-                <div class="form-group">
-                    <label>Zakres dat</label>
-                    <div class="date-range">
-                        <input type="date" id="dateFrom" class="form-control">
-                        <span>-</span>
-                        <input type="date" id="dateTo" class="form-control">
-                    </div>
-                </div>
-
-                <div class="form-group">
-                    <label>Dni tygodnia</label>
-                    <div class="weekdays-grid" id="weekdaysContainer">
-                        <!-- JS generated -->
-                    </div>
-                </div>
-
-                <div class="form-group">
-                    <label>Godziny (domyślne)</label>
-                    <div class="time-range">
-                        <input type="number" id="hourFrom" class="form-control" value="04" min="0" max="23">
-                        <span>:00 -</span>
-                        <input type="number" id="hourTo" class="form-control" value="22" min="0" max="23">
-                        <span>:00</span>
-                    </div>
-                </div>
-                
-                <!-- NEW: Advanced Filters Toggle -->
-                <div class="form-group">
-                    <button class="btn btn-sm btn-outline w-100" id="toggleAdvancedFilters">Więcej opcji (wykluczenia, godziny dniowe) ▼</button>
-                </div>
-                
-                <!-- NEW: Advanced Filters Panel (Hidden by default) -->
-                <div id="advancedFiltersPanel" class="advanced-filters hidden" style="margin-top: 10px; padding: 10px; background: #f9fafb; border-radius: 6px; border: 1px solid #e5e7eb;">
-                    <h4 style="font-size: 0.9rem; margin-bottom: 8px;">Wykluczone daty</h4>
-                    <div class="date-add-row" style="display: flex; gap: 6px; margin-bottom: 8px;">
-                        <input type="date" id="excludeDateInput" class="form-control form-control-sm">
-                        <button class="btn btn-sm btn-secondary" id="addExcludedDateBtn">+</button>
-                    </div>
-                    <div id="excludedDatesList" style="display: flex; flex-wrap: wrap; gap: 4px; margin-bottom: 12px;"></div>
+                <!-- SECTION 1: SEARCH CRITERIA (Scope) -->
+                <div class="filters-section">
+                    <h3>1. Kryteria wyszukiwania</h3>
                     
-                    <h4 style="font-size: 0.9rem; margin-bottom: 8px;">Godziny dla dni tygodnia</h4>
-                    <div id="dayTimeRangesContainer" style="display: flex; flex-direction: column; gap: 6px;">
-                        <!-- JS generated -->
+                    <div class="form-group">
+                        <label>Specjalność</label>
+                        <select id="specialtySelect" class="form-control">
+                            <option value="">Ładowanie...</option>
+                        </select>
+                    </div>
+
+                    <div class="form-group">
+                        <label>Zakres dat</label>
+                        <div class="date-range">
+                            <input type="date" id="dateFrom" class="form-control">
+                            <span>-</span>
+                            <input type="date" id="dateTo" class="form-control">
+                        </div>
+                    </div>
+
+                    <div class="form-group">
+                        <label>Lekarze (<span id="doctorsCount">0</span>)</label>
+                        <div class="custom-dropdown" id="doctorsDropdown">
+                            <div class="dropdown-trigger" id="doctorsTrigger" onclick="toggleDropdown('doctorsDropdown')">Wybierz...</div>
+                            <div class="dropdown-content">
+                                <input type="text" class="search-input" placeholder="Szukaj..." onkeyup="filterDropdown(this, 'doctorsList')">
+                                <div class="items-list" id="doctorsList"></div>
+                                <div class="dropdown-actions">
+                                    <button class="btn btn-xs" onclick="clearSelection('doctorsList')">Wyczyść</button>
+                                    <button class="btn btn-xs btn-primary" onclick="toggleDropdown('doctorsDropdown')">OK</button>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="form-group">
+                        <label>Placówki</label>
+                        <div class="custom-dropdown" id="clinicsDropdown">
+                            <div class="dropdown-trigger" id="clinicsTrigger" onclick="toggleDropdown('clinicsDropdown')">Wybierz...</div>
+                            <div class="dropdown-content">
+                                <input type="text" class="search-input" placeholder="Szukaj..." onkeyup="filterDropdown(this, 'clinicsList')">
+                                <div class="items-list" id="clinicsList"></div>
+                                <div class="dropdown-actions">
+                                    <button class="btn btn-xs" onclick="clearSelection('clinicsList')">Wyczyść</button>
+                                    <button class="btn btn-xs btn-primary" onclick="toggleDropdown('clinicsDropdown')">OK</button>
+                                </div>
+                            </div>
+                        </div>
                     </div>
                 </div>
 
+                <hr style="border: 0; border-top: 1px solid #e5e7eb; margin: 20px 0;">
+
+                <!-- SECTION 2: SCHEDULER / AVAILABILITY PREFERENCES -->
+                <div class="filters-section">
+                    <h3>2. Preferencje terminu / Automat</h3>
+
+                    <div class="form-group">
+                        <label>Dni tygodnia</label>
+                        <div class="weekdays-grid" id="weekdaysContainer">
+                            <!-- JS generated -->
+                        </div>
+                    </div>
+
+                    <div class="form-group">
+                        <label>Godziny (domyślne)</label>
+                        <div class="time-range">
+                            <input type="number" id="hourFrom" class="form-control" value="04" min="0" max="23">
+                            <span>:00 -</span>
+                            <input type="number" id="hourTo" class="form-control" value="22" min="0" max="23">
+                            <span>:00</span>
+                        </div>
+                    </div>
+                    
+                    <!-- Advanced Filters Toggle -->
+                    <div class="form-group">
+                        <button class="btn btn-sm btn-outline w-100" id="toggleAdvancedFilters">Więcej opcji (wykluczenia, godziny dniowe) ▼</button>
+                    </div>
+                    
+                    <!-- Advanced Filters Panel (Hidden by default) -->
+                    <div id="advancedFiltersPanel" class="advanced-filters hidden" style="margin-top: 10px; padding: 10px; background: #f9fafb; border-radius: 6px; border: 1px solid #e5e7eb;">
+                        <h4 style="font-size: 0.9rem; margin-bottom: 8px;">Wykluczone daty</h4>
+                        <div class="date-add-row" style="display: flex; gap: 6px; margin-bottom: 8px;">
+                            <input type="date" id="excludeDateInput" class="form-control form-control-sm">
+                            <button class="btn btn-sm btn-secondary" id="addExcludedDateBtn">+</button>
+                        </div>
+                        <div id="excludedDatesList" style="display: flex; flex-wrap: wrap; gap: 4px; margin-bottom: 12px;"></div>
+                        
+                        <h4 style="font-size: 0.9rem; margin-bottom: 8px;">Godziny dla dni tygodnia</h4>
+                        <div id="dayTimeRangesContainer" style="display: flex; flex-direction: column; gap: 6px;">
+                            <!-- JS generated -->
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Actions -->
                 <div class="actions-row">
                     <button id="resetBtn" class="btn btn-outline">Reset</button>
                     <button id="searchBtn" class="btn btn-primary">🔍 Wyszukaj</button>
