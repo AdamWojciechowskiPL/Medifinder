@@ -1,3 +1,4 @@
+
 """
 Backend Scheduler for Medifinder
 Manages background tasks for cyclic appointment checking and auto-booking
@@ -250,6 +251,20 @@ class MedifinderScheduler:
     def start_task(self, user_email: str, profile: str, search_params: Dict[str, Any], 
                    interval_minutes: int = 5, auto_book: bool = False, twin_profile: str = None) -> Dict[str, Any]:
         """Uruchamia nowe zadanie cyklicznego sprawdzania."""
+        
+        # --- NEW LIMIT CHECK (1 task per user) ---
+        user_tasks = self.get_all_user_tasks(user_email)
+        target_task_id = self._generate_task_id(user_email, profile)
+        
+        # Check if any OTHER task is active for this user
+        for tid, data in user_tasks.items():
+            if data.get('active', False) and tid != target_task_id:
+                return {
+                    'success': False, 
+                    'error': 'Limit zadań osiągnięty. Możesz mieć tylko 1 aktywny automat. Zatrzymaj inne zadania.'
+                }
+        # -----------------------------------------
+
         task_id = self._generate_task_id(user_email, profile)
         
         now_dt = datetime.now()
