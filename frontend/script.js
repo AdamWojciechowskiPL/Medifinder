@@ -11,6 +11,7 @@ let state = {
     doctors: [],
     clinics: [],
     searchResults: [],
+    selectedAppointment: null, // Currently selected appointment for booking
     schedulerStatus: null,
     ui: {
         filtersLocked: false,
@@ -831,6 +832,10 @@ async function handleSearch() {
     btn.disabled = true;
     btn.textContent = 'Szukanie...';
 
+    // Clear selection on new search
+    state.selectedAppointment = null;
+    document.getElementById('bookSelectedBtn').disabled = true;
+
     try {
         const payload = buildSearchPayload();
 
@@ -855,6 +860,47 @@ async function handleSearch() {
     } finally {
         // If scheduler became active in the meantime, keep the button disabled.
         setManualSearchEnabled(!(state.schedulerStatus && state.schedulerStatus.active));
+    }
+}
+
+async function handleBookSelected() {
+    if (!state.selectedAppointment) {
+        showToast('Nie zaznaczono wizyty!', 'error');
+        return;
+    }
+
+    const btn = document.getElementById('bookSelectedBtn');
+    btn.disabled = true;
+    btn.textContent = 'Rezerwowanie...';
+
+    const payload = {
+        profile: state.currentProfile,
+        appointment_id: state.selectedAppointment.appointmentId,
+        booking_string: state.selectedAppointment.bookingString
+    };
+
+    try {
+        const res = await fetch(`${API_BASE}/appointments/book`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            credentials: 'include',
+            body: JSON.stringify(payload)
+        });
+        const json = await res.json();
+        if (json.success) {
+            showToast('Zarezerwowano wizytę!', 'success');
+            // Remove booked appointment from list
+            state.searchResults = state.searchResults.filter(a => a.appointmentId !== state.selectedAppointment.appointmentId);
+            state.selectedAppointment = null;
+            renderResults();
+        } else {
+            showToast(json.message || json.error || 'Błąd rezerwacji', 'error');
+        }
+    } catch (e) {
+        showToast('Błąd połączenia', 'error');
+    } finally {
+        btn.disabled = !state.selectedAppointment;
+        btn.textContent = 'Zarezerwuj zaznaczoną';
     }
 }
 
@@ -1144,6 +1190,17 @@ function renderResults() {
     state.searchResults.forEach(apt => {
         const dateObj = new Date(apt.appointmentDate);
         const tr = document.createElement('tr');
+        
+        // Add ID for potential debugging/matching
+        tr.dataset.id = apt.appointmentId;
+        tr.style.cursor = 'pointer';
+
+        // Check if this row is selected
+        if (state.selectedAppointment && state.selectedAppointment.appointmentId === apt.appointmentId) {
+            tr.classList.add('selected-row'); // Assume CSS class needs to be defined or we use inline style
+            tr.style.backgroundColor = '#e0f2fe';
+        }
+
         tr.innerHTML = `
             <td>${dateObj.toLocaleDateString('pl-PL')}</td>
             <td><strong>${dateObj.toLocaleTimeString('pl-PL', {hour:'2-digit', minute:'2-digit'})}</strong></td>
@@ -1151,13 +1208,42 @@ function renderResults() {
             <td>${apt.specialty ? apt.specialty.name : '-'}</td>
             <td>${apt.clinic ? apt.clinic.name : '-'}</td>
         `;
+
+        tr.onclick = () => {
+            // Deselect if clicking the same one
+            if (state.selectedAppointment && state.selectedAppointment.appointmentId === apt.appointmentId) {
+                state.selectedAppointment = null;
+            } else {
+                state.selectedAppointment = apt;
+            }
+            
+            // Re-render to update UI state (simple way)
+            renderResults();
+            
+            // Update button state
+            const bookBtn = document.getElementById('bookSelectedBtn');
+            bookBtn.disabled = !state.selectedAppointment;
+        };
+
         tbody.appendChild(tr);
     });
+
+    // Sync button state in case render was called from elsewhere
+    const bookBtn = document.getElementById('bookSelectedBtn');
+    if (bookBtn) {
+        bookBtn.disabled = !state.selectedAppointment;
+    }
 }
 
 function setupEventListeners() {
     // Search Button
     document.getElementById('searchBtn').addEventListener('click', handleSearch);
+
+    // Book Selected Button
+    const bookBtn = document.getElementById('bookSelectedBtn');
+    if (bookBtn) {
+        bookBtn.addEventListener('click', handleBookSelected);
+    }
 
     // Date/Time changes (persist immediately)
     ['dateFrom', 'dateTo', 'hourFrom', 'hourTo'].forEach(id => {
@@ -1220,6 +1306,10 @@ function setupEventListeners() {
         renderWeekdaysGrid();
         renderExcludedDates();
         renderProfilesList();
+        
+        // Clear selection
+        state.selectedAppointment = null;
+        renderResults();
 
         saveState();
     });
