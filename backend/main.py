@@ -1,3 +1,4 @@
+
 import os
 import sys
 import shutil
@@ -173,8 +174,9 @@ def health_check():
     return jsonify({'status': 'ok', 'service': 'Medifinder API', 'version': '2.0.0'}), 200
 
 @app.route('/api/v1/debug/config', methods=['GET'])
+@require_login
 def debug_config():
-    """Sprawdza stan plików konfiguracyjnych."""
+    """Sprawdza stan plików konfiguracyjnych. WYMAGA LOGOWANIA."""
     status = {
         "config_dir": str(CONFIG_DIR),
         "seed_dir": str(SEED_DIR),
@@ -269,6 +271,10 @@ def scheduler_start():
             auto_book=data.get('auto_book', False),
             twin_profile=data.get('twin_profile')
         )
+        # Jeśli scheduler zwrócił błąd (np. limit zadań), przekaż go z odpowiednim kodem
+        if not result.get('success'):
+             return jsonify(result), 409
+
         return jsonify(result), 200
     except Exception as e:
         logger.error(f"Błąd uruchamiania zadania: {e}", exc_info=True)
@@ -355,6 +361,11 @@ def add_profile():
     if not med_app: return jsonify({'success': False, 'error': 'App not init'}), 500
     user_email = get_current_user_email()
     try:
+        # Check profiles limit per user
+        current_profiles = med_app.get_available_profiles(user_email)
+        if len(current_profiles) >= 5:
+            return jsonify({'success': False, 'error': 'Osiągnięto limit 5 profili'}), 400
+
         data = request.get_json() or {}
         med_app.add_profile(
             user_email=user_email,
