@@ -1,3 +1,4 @@
+
 /**
  * MEDIFINDER 2.0 Frontend Script
  * Handles UI interactions, API calls, and data rendering
@@ -1222,7 +1223,14 @@ function renderResults() {
     tbody.innerHTML = '';
 
     if (state.searchResults.length === 0) {
-        tbody.innerHTML = '<tr><td colspan="5" style="text-align:center; padding: 20px;">Brak wyników</td></tr>';
+        const tr = document.createElement('tr');
+        const td = document.createElement('td');
+        td.colSpan = 5;
+        td.style.textAlign = 'center';
+        td.style.padding = '20px';
+        td.textContent = 'Brak wyników';
+        tr.appendChild(td);
+        tbody.appendChild(tr);
         return;
     }
 
@@ -1237,13 +1245,29 @@ function renderResults() {
             tr.classList.add('selected-row');
         }
 
-        tr.innerHTML = `
-            <td>${dateObj.toLocaleDateString('pl-PL')}</td>
-            <td><strong>${dateObj.toLocaleTimeString('pl-PL', {hour:'2-digit', minute:'2-digit'})}</strong></td>
-            <td>${apt.doctor ? apt.doctor.name : '-'}</td>
-            <td>${apt.specialty ? apt.specialty.name : '-'}</td>
-            <td>${apt.clinic ? apt.clinic.name : '-'}</td>
-        `;
+        // --- XSS PROTECTION: Use textContent / createElement instead of innerHTML ---
+        const tdDate = document.createElement('td');
+        tdDate.textContent = dateObj.toLocaleDateString('pl-PL');
+        tr.appendChild(tdDate);
+
+        const tdTime = document.createElement('td');
+        const strongTime = document.createElement('strong');
+        strongTime.textContent = dateObj.toLocaleTimeString('pl-PL', {hour:'2-digit', minute:'2-digit'});
+        tdTime.appendChild(strongTime);
+        tr.appendChild(tdTime);
+
+        const tdDoc = document.createElement('td');
+        tdDoc.textContent = apt.doctor ? apt.doctor.name : '-';
+        tr.appendChild(tdDoc);
+
+        const tdSpec = document.createElement('td');
+        tdSpec.textContent = apt.specialty ? apt.specialty.name : '-';
+        tr.appendChild(tdSpec);
+
+        const tdClinic = document.createElement('td');
+        tdClinic.textContent = apt.clinic ? apt.clinic.name : '-';
+        tr.appendChild(tdClinic);
+        // --------------------------------------------------------------------------
 
         tr.onclick = () => {
             // Toggle selection
