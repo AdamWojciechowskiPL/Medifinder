@@ -337,7 +337,7 @@ class MedicoverAPI:
             return {
                 "success": False,
                 "error": "slottaken",
-                "message": "Brak możliwości zarezerwowania tego typu wizyty"
+                "message": "Masz już rezerwację u tej specjalności! (Limit 1 wizyty)"
             }
         else:
             logger.error(f"Booking failed with status: {response.status_code}")
