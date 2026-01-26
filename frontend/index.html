@@ -228,17 +228,26 @@
     <div id="profilesModal" class="modal hidden">
         <div class="modal-content">
             <span class="close-modal" onclick="toggleProfilesModal()">&times;</span>
-            <h3>Wybierz profil Medicover</h3>
+            <h3 style="margin-top: 0;">Wybierz profil Medicover</h3>
             <div id="profilesList" class="profiles-list"></div>
             
-            <hr>
-            <h4>Dodaj nowy profil</h4>
+            <hr style="border: 0; border-top: 1px solid #e5e7eb; margin: 16px 0;">
+            <h4 style="margin-bottom: 12px;">Dodaj nowy profil</h4>
             <form id="addProfileForm" class="add-profile-form">
-                <input type="text" id="newProfileName" placeholder="Nazwa (np. Jan)" required>
-                <input type="text" id="newProfileLogin" placeholder="Numer karty (MRN)" required>
-                <input type="password" id="newProfilePass" placeholder="Hasło" required>
-                <label><input type="checkbox" id="newProfileIsChild"> Konto dziecka?</label>
-                <button type="submit" class="btn btn-primary w-100">Dodaj profil</button>
+                <div class="form-row">
+                    <input type="text" id="newProfileName" class="form-control" placeholder="Nazwa (np. Jan)" required>
+                    <input type="text" id="newProfileLogin" class="form-control" placeholder="Numer karty (MRN)" required>
+                </div>
+                <div class="form-row">
+                    <input type="password" id="newProfilePass" class="form-control" placeholder="Hasło" required>
+                </div>
+                <div class="form-row checkbox-row">
+                     <label class="checkbox-label">
+                        <input type="checkbox" id="newProfileIsChild"> 
+                        Konto dziecka?
+                    </label>
+                </div>
+                <button type="submit" class="btn btn-primary w-100" style="margin-top: 4px;">Dodaj profil</button>
             </form>
         </div>
     </div>
