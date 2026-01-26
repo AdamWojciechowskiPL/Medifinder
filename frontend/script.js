@@ -1191,14 +1191,11 @@ function renderResults() {
         const dateObj = new Date(apt.appointmentDate);
         const tr = document.createElement('tr');
         
-        // Add ID for potential debugging/matching
-        tr.dataset.id = apt.appointmentId;
-        tr.style.cursor = 'pointer';
+        tr.dataset.appointmentId = apt.appointmentId;
 
-        // Check if this row is selected
+        // Apply selection state (without re-rendering on each click)
         if (state.selectedAppointment && state.selectedAppointment.appointmentId === apt.appointmentId) {
-            tr.classList.add('selected-row'); // Assume CSS class needs to be defined or we use inline style
-            tr.style.backgroundColor = '#e0f2fe';
+            tr.classList.add('selected-row');
         }
 
         tr.innerHTML = `
@@ -1210,15 +1207,20 @@ function renderResults() {
         `;
 
         tr.onclick = () => {
-            // Deselect if clicking the same one
+            // Toggle selection
             if (state.selectedAppointment && state.selectedAppointment.appointmentId === apt.appointmentId) {
+                // Deselect
                 state.selectedAppointment = null;
+                tr.classList.remove('selected-row');
             } else {
+                // Select new, deselect previous
+                const prevSelected = tbody.querySelector('tr.selected-row');
+                if (prevSelected) {
+                    prevSelected.classList.remove('selected-row');
+                }
                 state.selectedAppointment = apt;
+                tr.classList.add('selected-row');
             }
-            
-            // Re-render to update UI state (simple way)
-            renderResults();
             
             // Update button state
             const bookBtn = document.getElementById('bookSelectedBtn');
@@ -1228,7 +1230,7 @@ function renderResults() {
         tbody.appendChild(tr);
     });
 
-    // Sync button state in case render was called from elsewhere
+    // Sync button state
     const bookBtn = document.getElementById('bookSelectedBtn');
     if (bookBtn) {
         bookBtn.disabled = !state.selectedAppointment;
