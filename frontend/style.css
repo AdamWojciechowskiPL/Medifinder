@@ -153,10 +153,21 @@ body {
     flex-wrap: wrap; /* Allow wrapping on small screens */
 }
 
-.date-range input, .time-range input {
+.date-range input {
     flex: 1 1 120px; /* Allow wrapping if less than 120px */
     min-width: 0; /* Prevent overflow */
     max-width: 100%;
+}
+
+.time-range {
+    /* Specific styling for time inputs to keep them inline and smaller */
+    flex-wrap: nowrap; /* Don't wrap time inputs */
+}
+
+.time-range input {
+    flex: 0 1 80px; /* Do not grow too much, base width 80px */
+    min-width: 60px;
+    text-align: center;
 }
 
 .time-range span, .date-range span {
@@ -606,30 +617,40 @@ input:checked + .slider:before { transform: translateX(20px); }
         padding: 16px; /* Reduced padding on mobile */
     }
 
-    /* Fix Date/Time ranges wrapping */
-    .date-range, .time-range {
+    /* Date range styles (stacked on mobile) */
+    .date-range {
         flex-direction: column;
         align-items: stretch; /* Stretch to fill */
         gap: 6px;
     }
     
-    .date-range input, .time-range input {
+    .date-range input {
         width: 100%;
         max-width: 100%; /* Ensure inputs don't overflow */
         flex: none; /* Disable flex scaling */
     }
-    
-    .time-range span, .date-range span {
-        align-self: center; /* Center separator */
-        display: none; /* Hide separator in column mode for cleaner look */
-    }
-    
-    .time-range::before, .date-range::before {
-        /* Optional: Add "do" or "-" text using pseudo element if needed, 
-           but stacking usually implies "to" */
-        display: none; 
+
+    .date-range span {
+        display: none; /* Hide separator for date ranges on mobile */
     }
 
+    /* Time range styles (inline on mobile) */
+    .time-range {
+        flex-direction: row; /* Keep inline */
+        align-items: center;
+        gap: 8px;
+    }
+
+    .time-range input {
+        width: auto;
+        flex: 1; /* Distribute space evenly */
+        max-width: 80px; /* Limit width */
+    }
+
+    .time-range span {
+        display: inline; /* Keep separators visible */
+    }
+    
     .scheduler-bar {
         flex-direction: column;
         align-items: flex-start;
