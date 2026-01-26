@@ -1013,6 +1013,42 @@ function syncFiltersFromSchedulerStatus(st) {
     return true;
 }
 
+function syncSchedulerOptionsFromBackend(st) {
+    if (!st || typeof st !== 'object') return;
+
+    // Restore Auto-Booking checkbox
+    const autoBookEl = document.getElementById('autoBook');
+    if (autoBookEl) {
+        autoBookEl.checked = Boolean(st.auto_book);
+    }
+
+    // Restore Twin Booking checkbox and select
+    const twinCheckEl = document.getElementById('enableTwinBooking');
+    const twinSelectEl = document.getElementById('twinProfileSelect');
+    
+    if (twinCheckEl && twinSelectEl) {
+        const twinProfile = st.twin_profile || null;
+        const isTwinEnabled = Boolean(twinProfile);
+        
+        twinCheckEl.checked = isTwinEnabled;
+        twinSelectEl.style.display = isTwinEnabled ? 'inline-block' : 'none';
+        
+        if (isTwinEnabled && twinProfile) {
+            // Try to select the twin profile in dropdown
+            const option = Array.from(twinSelectEl.options).find(opt => opt.value === twinProfile);
+            if (option) {
+                twinSelectEl.value = twinProfile;
+            }
+        }
+    }
+
+    // Restore interval
+    const intervalEl = document.getElementById('checkInterval');
+    if (intervalEl && st.interval_minutes) {
+        intervalEl.value = String(st.interval_minutes);
+    }
+}
+
 async function startScheduler() {
     updateFiltersFromUI();
     if (state.filters.specialtyIds.length === 0) {
@@ -1120,6 +1156,9 @@ async function checkSchedulerStatus() {
             if (syncFiltersFromSchedulerStatus(json.data)) {
                 saveState();
             }
+
+            // NEW: Restore scheduler options (auto-book, twin booking) from backend
+            syncSchedulerOptionsFromBackend(json.data);
 
             // Lock all filter params when scheduler is active
             setManualSearchEnabled(false);
