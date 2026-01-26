@@ -477,6 +477,21 @@ input:checked + .slider:before { transform: translateX(20px); }
 .results-table tr:last-child td { border-bottom: none; }
 .results-table tr:hover { background: #f9fafb; }
 
+/* Selected Row Styles */
+.results-table tbody tr {
+    cursor: pointer;
+    transition: background-color 0.2s;
+}
+
+.results-table tbody tr.selected-row {
+    background: #dbeafe !important;
+    border-left: 4px solid var(--primary);
+}
+
+.results-table tbody tr.selected-row:hover {
+    background: #bfdbfe !important;
+}
+
 /* Login Overlay */
 .login-overlay {
     position: fixed;
