@@ -1070,7 +1070,7 @@ async function checkSchedulerStatus() {
             statusBox.classList.add('active');
             switchEl.checked = true;
 
-            // NEW: Sync filters to backend search_params when scheduler is active (multi-device consistency)
+            // Sync filters to backend search_params when scheduler is active (multi-device consistency)
             if (syncFiltersFromSchedulerStatus(json.data)) {
                 saveState();
             }
@@ -1340,6 +1340,10 @@ function renderSchedulerDetails() {
     if (st.last_results) {
         const cnt = st.last_results.count ?? 0;
         info += ` | Ost. wynik: ${cnt} wizyt (${formatTime(st.last_results.timestamp, true)})`;
+    }
+
+    if (st.expires_at) {
+        info += ` | ⏳ Do: ${formatTime(st.expires_at)}`;
     }
 
     if (st.twin_profile) {
