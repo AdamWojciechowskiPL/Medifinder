@@ -13,7 +13,8 @@ let state = {
     searchResults: [],
     schedulerStatus: null,
     ui: {
-        filtersLocked: false
+        filtersLocked: false,
+        notificationsReady: false
     },
     filters: {
         specialtyIds: [],
@@ -38,8 +39,199 @@ const LEGACY_FILTERS_KEY = 'medifinder_last_filters';
 
 const SELECTED_PROFILE_KEY = 'medifinder_selected_profile';
 
+const NOTIFY_LAST_RESULTS_PREFIX = 'medifinder_notify_last_results_ts__';
+const NOTIFY_LAST_BOOKING_PREFIX = 'medifinder_notify_last_booking_ts__';
+
 let schedulerCountdownInterval = null;
 let schedulerCountdownNextRunIso = null;
+
+let audioCtx = null;
+let audioUnlocked = false;
+
+function unlockAudio() {
+    // Must be called from a user gesture at least once (browser policy).
+    try {
+        if (!audioCtx) {
+            const Ctx = window.AudioContext || window.webkitAudioContext;
+            if (!Ctx) return;
+            audioCtx = new Ctx();
+        }
+        if (audioCtx.state === 'suspended') {
+            audioCtx.resume().catch(() => { /* ignore */ });
+        }
+        audioUnlocked = true;
+    } catch (e) {
+        // ignore
+    }
+}
+
+function playBeep() {
+    if (!audioUnlocked || !audioCtx) return;
+
+    try {
+        const ctx = audioCtx;
+        const osc = ctx.createOscillator();
+        const gain = ctx.createGain();
+
+        osc.type = 'sine';
+        osc.frequency.value = 880;
+
+        // Subtle volume envelope.
+        gain.gain.setValueAtTime(0.0001, ctx.currentTime);
+        gain.gain.exponentialRampToValueAtTime(0.12, ctx.currentTime + 0.01);
+        gain.gain.exponentialRampToValueAtTime(0.0001, ctx.currentTime + 0.18);
+
+        osc.connect(gain);
+        gain.connect(ctx.destination);
+
+        osc.start();
+        osc.stop(ctx.currentTime + 0.2);
+    } catch (e) {
+        // ignore
+    }
+}
+
+function getNotifyStorageKey(prefix, profileLogin) {
+    const p = profileLogin || state.currentProfile;
+    if (!p) return null;
+    return `${prefix}${encodeURIComponent(String(p))}`;
+}
+
+function lsGet(key) {
+    if (!key) return null;
+    try {
+        const v = localStorage.getItem(key);
+        return v ? String(v) : null;
+    } catch (e) {
+        return null;
+    }
+}
+
+function lsSet(key, value) {
+    if (!key) return;
+    try {
+        localStorage.setItem(key, String(value));
+    } catch (e) {
+        // ignore
+    }
+}
+
+async function ensureNotificationPermission() {
+    if (!('Notification' in window)) return false;
+    if (Notification.permission === 'granted') return true;
+    if (Notification.permission === 'denied') return false;
+
+    try {
+        const perm = await Notification.requestPermission();
+        return perm === 'granted';
+    } catch (e) {
+        return false;
+    }
+}
+
+function sendSystemNotification(title, body) {
+    if (!('Notification' in window)) return false;
+    if (Notification.permission !== 'granted') return false;
+
+    try {
+        const n = new Notification(title, {
+            body: body || '',
+            silent: true
+        });
+        n.onclick = () => {
+            try {
+                window.focus();
+            } catch (e) {
+                // ignore
+            }
+            try {
+                n.close();
+            } catch (e) {
+                // ignore
+            }
+        };
+        return true;
+    } catch (e) {
+        return false;
+    }
+}
+
+function notifyEvent(title, body, toastType = 'info') {
+    const ok = sendSystemNotification(title, body);
+    playBeep();
+
+    // Fallback when notifications are blocked/unsupported.
+    if (!ok) {
+        showToast(body || title, toastType);
+    }
+}
+
+function formatFirstAppointmentHint(appointments) {
+    if (!Array.isArray(appointments) || appointments.length === 0) return '';
+
+    const first = appointments[0];
+    const iso = first?.appointmentDate || first?.appointment_date;
+    if (!iso) return '';
+
+    const d = parseUtcDate(iso) || new Date(iso);
+    if (!d || Number.isNaN(d.getTime())) return '';
+
+    const day = d.toLocaleDateString('pl-PL');
+    const time = d.toLocaleTimeString('pl-PL', { hour: '2-digit', minute: '2-digit' });
+    return ` Najbliższa: ${day} ${time}.`;
+}
+
+function processSchedulerNotifications(st, allowNotify) {
+    if (!st) return;
+
+    // --- New results notification ---
+    const lr = st.last_results;
+    const lrTs = lr?.timestamp ? String(lr.timestamp) : null;
+    if (lrTs) {
+        const key = getNotifyStorageKey(NOTIFY_LAST_RESULTS_PREFIX);
+        const prevTs = lsGet(key);
+
+        if (!prevTs) {
+            // First run after page/profile load: record baseline (avoid spam).
+            lsSet(key, lrTs);
+        } else if (prevTs !== lrTs) {
+            lsSet(key, lrTs);
+
+            const cnt = parseInt(lr?.count ?? 0, 10) || 0;
+            const pairsCnt = parseInt(lr?.pairs_count ?? 0, 10) || 0;
+
+            if (allowNotify && cnt > 0) {
+                let body = `Znaleziono ${cnt} wizyt.`;
+                if (pairsCnt > 0) {
+                    body += ` (Pary: ${pairsCnt}).`;
+                }
+                body += formatFirstAppointmentHint(lr?.appointments);
+
+                notifyEvent('Medifinder: znaleziono wizyty', body, 'success');
+            }
+        }
+    }
+
+    // --- Booking notification ---
+    const lb = st.last_booking;
+    const lbTs = lb?.timestamp ? String(lb.timestamp) : null;
+    if (lbTs) {
+        const key = getNotifyStorageKey(NOTIFY_LAST_BOOKING_PREFIX);
+        const prevTs = lsGet(key);
+
+        if (!prevTs) {
+            // Baseline; do not notify immediately after reload.
+            lsSet(key, lbTs);
+        } else if (prevTs !== lbTs) {
+            lsSet(key, lbTs);
+
+            if (allowNotify) {
+                const mode = lb?.mode === 'twin' ? ' (bliźniaki)' : '';
+                notifyEvent('Medifinder: auto-rezerwacja', `Zarezerwowano wizytę${mode}.`, 'success');
+            }
+        }
+    }
+}
 
 function getDefaultFilters() {
     return {
@@ -255,6 +447,9 @@ document.addEventListener('DOMContentLoaded', async () => {
     checkAuthStatus();
     setupEventListeners();
 
+    // Unlock audio on first user gesture so beeps can work even in background.
+    document.addEventListener('click', unlockAudio, { once: true });
+
     // Setup Twin Booking UI toggle
     const twinCheck = document.getElementById('enableTwinBooking');
     const twinSelect = document.getElementById('twinProfileSelect');
@@ -360,6 +555,7 @@ function selectProfile(profileLogin) {
 
     state.currentProfile = profileLogin;
     saveSelectedProfile(profileLogin);
+    state.ui.notificationsReady = false;
 
     document.getElementById('currentProfileLabel').textContent = getProfileDisplayLabel(profileLogin);
     document.getElementById('profilesModal').classList.add('hidden');
@@ -681,6 +877,10 @@ async function startScheduler() {
         return;
     }
 
+    // Ask for permissions from a user gesture.
+    unlockAudio();
+    ensureNotificationPermission();
+
     const interval = document.getElementById('checkInterval').value;
     const autoBook = document.getElementById('autoBook').checked;
 
@@ -758,6 +958,12 @@ async function checkSchedulerStatus() {
         const statusBox = document.getElementById('autoCheckStatus');
         const switchEl = document.getElementById('enableAutoCheck');
         const detailsRow = document.getElementById('schedulerDetailsRow');
+
+        const st = (json && json.success) ? (json.data || null) : null;
+        if (st) {
+            processSchedulerNotifications(st, state.ui.notificationsReady);
+            state.ui.notificationsReady = true;
+        }
 
         if (json.success && json.data && json.data.active) {
             state.schedulerStatus = json.data;
