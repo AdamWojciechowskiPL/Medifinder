@@ -1,82 +1,81 @@
-# Medicover Appointment Finder
+# 🏥 Medifinder - Platforma Webowa
 
-Zaawansowana aplikacja desktopowa w języku Python do automatycznego wyszukiwania i rezerwowania wizyt lekarskich w systemie Medicover.
+Zaawansowana platforma webowa do automatycznego wyszukiwania i rezerwacji wizyt w systemie Medicover.
+Zaprojektowana do działania w chmurze (Railway.app), oferuje dostęp 24/7, automatyczne harmonogramy i obsługę wielu profili.
 
-## Kluczowe Funkcjonalności
+## 🌟 Główne Funkcje
 
--   **Nowoczesny Interfejs Graficzny (GUI)**: Aplikacja działa wyłącznie w trybie graficznym (opartym na Tkinter).
--   **Zarządzanie Wieloma Profilami**: Bezpieczne zarządzanie wieloma kontami Medicover (np. dla całej rodziny). Dane logowania są szyfrowane i przechowywane lokalnie, a przełączanie między profilami jest proste i szybkie.
--   **Ustawienia Per Profil**: Każdy profil użytkownika ma swoje własne, unikalne ustawienia filtrów i automatyzacji, które są automatycznie zapisywane i wczytywane przy przełączaniu.
--   **Zaawansowane Filtrowanie Wielokrotne**: Możliwość filtrowania wizyt po specjalności oraz **wielu lekarzach i placówkach jednocześnie**, co znacząco zwiększa elastyczność wyszukiwania.
--   **Sortowanie Wyników**: Listę znalezionych wizyt można dynamicznie sortować rosnąco lub malejąco po dowolnej kolumnie (data, lekarz, specjalność, placówka) przez kliknięcie w jej nagłówek.
--   **Elastyczna Automatyczna Rezerwacja (Tryb Bota)**: Funkcja, która pozwala na automatyczne zarezerwowanie pierwszej wizyty spełniającej szczegółowe kryteria, takie jak **wybrane dni tygodnia** oraz **dokładny przedział godzinowy** (np. od 10:00 do 15:00).
--   **Inteligentna Obsługa Blokad API**: Aplikacja wykrywa twarde blokady API (błąd 429) nałożone przez Medicover. W takim przypadku automatycznie wchodzi w 10-minutowy tryb "kwarantanny", blokując interfejs i wyświetlając licznik, aby chronić konto użytkownika.
--   **Niezawodne Logowanie**: Proces logowania przez Selenium jest zoptymalizowany pod kątem omijania podstawowych zabezpieczeń anty-botowych i potrafi inteligentnie czekać na odblokowanie sesji Windows.
+*   **Webowy Interfejs**: Responsywny frontend (HTML/JS) dostępny z dowolnego urządzenia.
+*   **Automatyzacja (Scheduler)**: Wbudowany harmonogram sprawdzania wizyt w tle (nawet gdy przeglądarka jest zamknięta).
+*   **Wieloprofilowość**: Obsługa wielu kont Medicover (rodzina/znajomi) z izolacją sesji.
+*   **Inteligentne Filtrowanie**: Wyszukiwanie po specjalnościach, konkretnych lekarzach, placówkach i przedziałach godzinowych.
+*   **Szyfrowanie**: Hasła przechowywane lokalnie (AES-256), nie wysyłane do zewnętrznych serwerów (poza Medicover).
+*   **Cloud Native**: Zoptymalizowana pod konteneryzację (Docker) i wdrożenie na Railway.app.
 
-## Architektura Projektu
+## 🏗️ Architektura
 
-Aplikacja została zbudowana w oparciu o zasady **modularności** i **separacji odpowiedzialności (SoC)**, z wyraźnym podziałem na kod aplikacji i pliki konfiguracyjne.
+Aplikacja działa jako pojedynczy serwis (Monolit) w kontenerze Docker:
+*   **Backend**: Python 3.11 + Flask (REST API).
+*   **Core**: Selenium WebDriver (Headless Chrome) do interakcji z Medicover.
+*   **Task Queue**: Wewnętrzny APScheduler do zadań w tle (nie blokuje API).
+*   **Frontend**: Statyczne pliki HTML/JS serwowane bezpośrednio przez Flask.
+*   **Storage**: Wolumeny dyskowe do trwałego zapisu konfiguracji (`/config`).
 
-```
-medicover-app/
-│
-├── config/                # Katalog na wszystkie pliki konfiguracyjne
-│   ├── credentials.json
-│   ├── profiles.json
-│   └── ...
-│
-├── app/                   # Katalog z kodem źródłowym aplikacji
-│   ├── main.py
-│   ├── gui.py
-│   └── ...
-│
-├── requirements.txt       # Lista zależności Pythona
-├── install.bat            # Skrypt instalacyjny
-├── run.py                 # Główny plik startowy aplikacji
-└── start.bat              # Skrypt uruchomieniowy dla użytkownika
-```
+## 🚀 Wdrożenie (Railway)
 
-## Wymagania Wstępne
+Aplikacja jest skonfigurowana do natychmiastowego wdrożenia na Railway.app.
 
--   Windows 10 lub nowszy
--   Python 3.9+
--   Przeglądarka Google Chrome
+1.  Zforkuj to repozytorium.
+2.  Zaloguj się do [Railway.app](https://railway.app).
+3.  Utwórz nowy projekt -> "Deploy from GitHub repo".
+4.  Wybierz to repozytorium.
+5.  Railway automatycznie wykryje `Dockerfile` i `railway.toml`.
 
-## Instalacja
+**Zmienne środowiskowe (opcjonalne):**
+*   `FLASK_SECRET_KEY`: Losowy ciąg znaków dla sesji.
+*   `GOOGLE_CLIENT_ID` / `GOOGLE_CLIENT_SECRET`: Do logowania przez Google (jeśli używane).
 
-Proces instalacji jest w pełni zautomatyzowany.
+## 💻 Uruchomienie Lokalne
 
-1.  **Pobierz i zainstaluj Pythona**: Jeśli nie masz go na komputerze, pobierz instalator ze strony `python.org`. **Ważne:** Podczas instalacji zaznacz opcję **"Add Python to PATH"**.
+Wymagany Python 3.11+ oraz Google Chrome.
 
-2.  **Rozpakuj archiwum z aplikacją** do wybranego folderu.
+1.  Sklonuj repozytorium:
+    ```bash
+    git clone https://github.com/AdamWojciechowskiPL/Medifinder.git
+    cd Medifinder
+    ```
+2.  Zainstaluj zależności:
+    ```bash
+    pip install -r requirements.txt
+    ```
+3.  Uruchom serwer:
+    ```bash
+    python run.py
+    ```
+4.  Otwórz `http://localhost:5000`.
 
-3.  **Uruchom instalator**: Kliknij dwukrotnie plik **`install.bat`**. Skrypt automatycznie:
-    *   Sprawdzi, czy Python jest dostępny.
-    *   Stworzy izolowane środowisko wirtualne w folderze `venv/`.
-    *   Zainstaluje wszystkie wymagane biblioteki.
-    Postępuj zgodnie z instrukcjami w oknie konsoli.
+## 📚 API Endpoints
 
-## Uruchomienie Aplikacji
+### Auth & System
+*   `GET /health` - Status usługi.
+*   `POST /auth/login` - Logowanie (OAuth/Session).
 
-Po pomyślnej instalacji, aplikację uruchamia się w bardzo prosty sposób:
+### Profile & Słowniki
+*   `GET /api/v1/profiles` - Lista dostępnych profili.
+*   `POST /api/v1/profiles/add` - Dodawanie zaszyfrowanego profilu.
+*   `GET /api/v1/dictionaries/{specialties|doctors|clinics}` - Dane słownikowe.
 
-**Kliknij dwukrotnie plik `start.bat`**.
+### Wizyty & Scheduler
+*   `POST /api/v1/appointments/search` - Jednorazowe wyszukiwanie.
+*   `POST /api/v1/appointments/book` - Rezerwacja wizyty.
+*   `POST /api/v1/scheduler/start` - Uruchomienie cyklicznego szukania.
+*   `GET /api/v1/scheduler/results` - Pobranie wyników z tła.
 
-Pojawi się wyłącznie okno aplikacji, bez dodatkowego okna konsoli w tle.
+## 🔒 Bezpieczeństwo
 
-## Pierwsze Użycie i Konfiguracja
+*   Hasła do profili Medicover są szyfrowane kluczem AES-256 generowanym przy pierwszym uruchomieniu (`config/profile_key.key`).
+*   Komunikacja z Medicover odbywa się przez izolowaną sesję przeglądarki.
+*   Żadne dane medyczne nie są przesyłane do twórców aplikacji.
 
-Przy pierwszym uruchomieniu aplikacja automatycznie utworzy niezbędne pliki w katalogu `config/`.
-
-#### 1. Tworzenie Profilu
-Aplikacja poprosi Cię o stworzenie pierwszego profilu. Przejdź do zwijanej sekcji **"Zarządzanie Profilem"** i użyj przycisku **"Zarządzaj Profilami..."**. Będziesz musiał podać:
--   **Login**: Twój numer karty Medicover.
--   **Hasło**: Twoje hasło do systemu Medicover.
--   **Twoja nazwa konta**: Dowolna, czytelna nazwa, która będzie widoczna w GUI (np. "Moje konto", "Konto Adama").
-
-#### 2. Pliki Konfiguracyjne
-Wszystkie pliki konfiguracyjne znajdują się w folderze `config/`:
--   `profiles.json`: Przechowuje Twoje profile użytkowników. Hasła są w nim **zaszyfrowane**.
--   `profile_key.key`: **Klucz do szyfrowania haseł**. Jest on unikalny dla Twojego komputera. **Ważne:** Jeśli chcesz przenieść aplikację na inny komputer, musisz skopiować zarówno `profiles.json`, jak i ten plik klucza.
--   `gui_settings.json`: Plik zarządzany **automatycznie**. Przechowuje ostatni stan interfejsu (filtry, ustawienia automatyzacji) dla każdego profilu.
--   `credentials.json`: Przechowuje ogólną konfigurację aplikacji, taką jak domyślny region wyszukiwania czy ustawienia trybu `headless`.
+---
+*Autor: AdamWojciechowskiPL*
