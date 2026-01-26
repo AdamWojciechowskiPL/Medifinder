@@ -456,7 +456,7 @@ def book_appointment():
             appointment_id=data.get('appointment_id'),
             booking_string=data.get('booking_string') or data.get('bookingString')
         )
-        return jsonify({'success': True, 'message': 'Rezerwacja OK', 'data': result}), 200
+        return jsonify(result), 200
     except Exception as e: return jsonify({'success': False, 'error': str(e)}), 500
 
 # ======== SERVING FRONTEND =========
