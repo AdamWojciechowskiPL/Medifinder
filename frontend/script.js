@@ -14,7 +14,8 @@ let state = {
     schedulerStatus: null,
     ui: {
         filtersLocked: false,
-        notificationsReady: false
+        notificationsReady: false,
+        lastSchedulerParamsSig: null
     },
     filters: {
         specialtyIds: [],
@@ -463,7 +464,7 @@ document.addEventListener('DOMContentLoaded', async () => {
 // --- AUTH ---
 async function checkAuthStatus() {
     try {
-        const res = await fetch('/auth/me');
+        const res = await fetch('/auth/me', { credentials: 'include' });
         const data = await res.json();
 
         console.log('Auth Status:', data); // DEBUG
@@ -491,7 +492,7 @@ function loginWithGoogle() {
 }
 
 document.getElementById('authBtn').onclick = async () => {
-    await fetch('/auth/logout', { method: 'POST' });
+    await fetch('/auth/logout', { method: 'POST', credentials: 'include' });
     window.location.reload();
 };
 
@@ -504,7 +505,7 @@ async function initializeApp() {
 
 async function loadProfiles() {
     try {
-        const res = await fetch(`${API_BASE}/profiles`);
+        const res = await fetch(`${API_BASE}/profiles`, { credentials: 'include' });
         const json = await res.json();
         if (json.success) {
             state.profiles = normalizeProfilesList(json.data);
@@ -556,6 +557,7 @@ function selectProfile(profileLogin) {
     state.currentProfile = profileLogin;
     saveSelectedProfile(profileLogin);
     state.ui.notificationsReady = false;
+    state.ui.lastSchedulerParamsSig = null;
 
     document.getElementById('currentProfileLabel').textContent = getProfileDisplayLabel(profileLogin);
     document.getElementById('profilesModal').classList.add('hidden');
@@ -574,7 +576,7 @@ async function loadDictionaries() {
     if (!state.currentProfile) return;
 
     // Load Specialties
-    const specRes = await fetch(`${API_BASE}/dictionaries/specialties?profile=${state.currentProfile}`);
+    const specRes = await fetch(`${API_BASE}/dictionaries/specialties?profile=${state.currentProfile}`, { credentials: 'include' });
     const specJson = await specRes.json();
     if (specJson.success) {
         state.specialties = specJson.data;
@@ -582,7 +584,7 @@ async function loadDictionaries() {
     }
 
     // Load Doctors
-    const docRes = await fetch(`${API_BASE}/dictionaries/doctors`);
+    const docRes = await fetch(`${API_BASE}/dictionaries/doctors`, { credentials: 'include' });
     const docJson = await docRes.json();
     if (docJson.success) {
         state.doctors = docJson.data;
@@ -590,7 +592,7 @@ async function loadDictionaries() {
     }
 
     // Load Clinics
-    const clinRes = await fetch(`${API_BASE}/dictionaries/clinics`);
+    const clinRes = await fetch(`${API_BASE}/dictionaries/clinics`, { credentials: 'include' });
     const clinJson = await clinRes.json();
     if (clinJson.success) {
         state.clinics = clinJson.data;
@@ -835,6 +837,7 @@ async function handleSearch() {
         const res = await fetch(`${API_BASE}/appointments/search`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
+            credentials: 'include',
             body: JSON.stringify(payload)
         });
 
@@ -868,6 +871,100 @@ function buildSearchPayload() {
         day_time_ranges: state.filters.dayTimeRanges,
         excluded_dates: state.filters.excludedDates
     };
+}
+
+function formatLocalDateInput(d) {
+    if (!d || Number.isNaN(d.getTime())) return '';
+    const y = d.getFullYear();
+    const m = String(d.getMonth() + 1).padStart(2, '0');
+    const day = String(d.getDate()).padStart(2, '0');
+    return `${y}-${m}-${day}`;
+}
+
+function buildFiltersFromSearchParams(searchParams) {
+    const base = getDefaultFilters();
+    const sp = searchParams && typeof searchParams === 'object' ? searchParams : {};
+
+    base.specialtyIds = normalizeIdArray(sp.specialty_ids ?? sp.specialtyIds);
+    base.doctorIds = normalizeIdArray(sp.doctor_ids ?? sp.doctorIds);
+    base.clinicIds = normalizeIdArray(sp.clinic_ids ?? sp.clinicIds);
+
+    // Dates
+    base.dateFrom = sp.start_date ? formatLocalDateInput(parseUtcDate(sp.start_date)) : '';
+    base.dateTo = sp.end_date ? formatLocalDateInput(parseUtcDate(sp.end_date)) : '';
+
+    // Time range
+    const tr = sp.time_range ?? sp.timeRange;
+    if (tr && typeof tr === 'object') {
+        const start = typeof tr.start === 'string' ? tr.start : base.timeRange.start;
+        const end = typeof tr.end === 'string' ? tr.end : base.timeRange.end;
+        base.timeRange = { start, end };
+    }
+
+    // Preferred days
+    if (Array.isArray(sp.preferred_days)) {
+        base.preferredDays = sp.preferred_days
+            .map(v => parseInt(v, 10))
+            .filter(v => Number.isFinite(v) && v >= 0 && v <= 6);
+    }
+
+    // Excluded dates
+    if (Array.isArray(sp.excluded_dates)) {
+        base.excludedDates = sp.excluded_dates.map(v => String(v)).filter(Boolean);
+    }
+
+    // Day-specific time ranges
+    if (sp.day_time_ranges && typeof sp.day_time_ranges === 'object') {
+        base.dayTimeRanges = sp.day_time_ranges;
+    }
+
+    return base;
+}
+
+function applyFiltersToUI() {
+    // Dates
+    const dateFromEl = document.getElementById('dateFrom');
+    const dateToEl = document.getElementById('dateTo');
+    if (dateFromEl && typeof state.filters.dateFrom === 'string') dateFromEl.value = state.filters.dateFrom;
+    if (dateToEl && typeof state.filters.dateTo === 'string') dateToEl.value = state.filters.dateTo;
+
+    // Time
+    applyTimeRangeToUI();
+
+    // Specialty + dependent doctors
+    if (Array.isArray(state.specialties) && state.specialties.length > 0) {
+        renderSpecialtiesSelect();
+    }
+
+    if (Array.isArray(state.doctors) && state.doctors.length > 0) {
+        filterDoctorsBySpecialty();
+    }
+
+    if (Array.isArray(state.clinics) && state.clinics.length > 0) {
+        renderDropdownList(state.clinics, 'clinicsList', 'clinicIds');
+    }
+
+    renderWeekdaysGrid();
+    renderExcludedDates();
+}
+
+function syncFiltersFromSchedulerStatus(st) {
+    const sp = st?.search_params;
+    if (!sp || typeof sp !== 'object') return false;
+
+    let sig = null;
+    try {
+        sig = JSON.stringify(sp);
+    } catch (e) {
+        sig = null;
+    }
+
+    if (sig && state.ui.lastSchedulerParamsSig === sig) return false;
+    state.ui.lastSchedulerParamsSig = sig;
+
+    state.filters = buildFiltersFromSearchParams(sp);
+    applyFiltersToUI();
+    return true;
 }
 
 async function startScheduler() {
@@ -906,6 +1003,7 @@ async function startScheduler() {
         const res = await fetch(`${API_BASE}/scheduler/start`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
+            credentials: 'include',
             body: JSON.stringify(payload)
         });
         const json = await res.json();
@@ -937,6 +1035,7 @@ async function stopScheduler() {
         await fetch(`${API_BASE}/scheduler/stop`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
+            credentials: 'include',
             body: JSON.stringify({ profile: state.currentProfile })
         });
         showToast('Automat zatrzymany', 'info');
@@ -952,7 +1051,7 @@ async function stopScheduler() {
 async function checkSchedulerStatus() {
     if (!state.currentProfile) return;
     try {
-        const res = await fetch(`${API_BASE}/scheduler/status?profile=${state.currentProfile}`);
+        const res = await fetch(`${API_BASE}/scheduler/status?profile=${state.currentProfile}`, { credentials: 'include' });
         const json = await res.json();
 
         const statusBox = document.getElementById('autoCheckStatus');
@@ -970,6 +1069,11 @@ async function checkSchedulerStatus() {
             statusBox.textContent = 'AKTYWNY';
             statusBox.classList.add('active');
             switchEl.checked = true;
+
+            // NEW: Sync filters to backend search_params when scheduler is active (multi-device consistency)
+            if (syncFiltersFromSchedulerStatus(json.data)) {
+                saveState();
+            }
 
             // Lock all filter params when scheduler is active
             setManualSearchEnabled(false);
@@ -996,6 +1100,8 @@ async function checkSchedulerStatus() {
 
             stopSchedulerCountdown();
             if (detailsRow) detailsRow.style.display = 'none';
+
+            state.ui.lastSchedulerParamsSig = null;
 
             setManualSearchEnabled(true);
             setFiltersEnabled(true);
@@ -1324,6 +1430,7 @@ document.getElementById('addProfileForm').addEventListener('submit', async (e) =
         const res = await fetch(`${API_BASE}/profiles/add`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
+            credentials: 'include',
             body: JSON.stringify({ name, login, password: pass, is_child_account: isChild })
         });
         const json = await res.json();
