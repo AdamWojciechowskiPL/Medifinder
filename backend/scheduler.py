@@ -116,6 +116,20 @@ class MedifinderScheduler:
         search_params = task_data['search_params']
         auto_book = task_data.get('auto_book', False)
         
+        # --- AUTO STOP CHECK (24h) ---
+        expires_at_str = task_data.get('expires_at')
+        if expires_at_str:
+            try:
+                expires_at = datetime.fromisoformat(expires_at_str)
+                if datetime.now() > expires_at:
+                    logger.info(f"🛑 [{task_id}] Czas działania (24h) minął. Zatrzymuję zadanie.")
+                    self.stop_task(user_email, profile)
+                    self.tasks[task_id]['stop_reason'] = "Timeout 24h"
+                    self._save_tasks()
+                    return
+            except ValueError:
+                pass # Ignorujemy błędy parsowania daty, zadanie biegnie dalej
+
         # --- NEW: Twin Booking Params ---
         twin_profile = task_data.get('twin_profile')
         is_twin_mode = bool(twin_profile)
@@ -238,15 +252,19 @@ class MedifinderScheduler:
         """Uruchamia nowe zadanie cyklicznego sprawdzania."""
         task_id = self._generate_task_id(user_email, profile)
         
+        now_dt = datetime.now()
+        expires_at = now_dt + timedelta(hours=24) # Auto-stop po 24h
+
         task_data = {
             'user_email': user_email,
             'profile': profile,
-            'twin_profile': twin_profile, # NEW
+            'twin_profile': twin_profile, 
             'search_params': search_params,
             'interval_minutes': interval_minutes,
             'auto_book': auto_book,
             'active': True,
-            'created_at': datetime.now().isoformat(),
+            'created_at': now_dt.isoformat(),
+            'expires_at': expires_at.isoformat(), # Zapisujemy czas wygaśnięcia
             'runs_count': 0
         }
         
@@ -262,7 +280,8 @@ class MedifinderScheduler:
             'success': True,
             'message': msg,
             'task_id': task_id,
-            'next_run': task_data.get('next_run')
+            'next_run': task_data.get('next_run'),
+            'expires_at': expires_at.isoformat()
         }
     
     def stop_task(self, user_email: str, profile: str) -> Dict[str, Any]:
