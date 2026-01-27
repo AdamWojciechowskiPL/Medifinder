@@ -44,7 +44,10 @@ class MedicoverApp:
         # Key: (user_email, profile_login) -> Value: {'token': str, 'expires_at': datetime, 'last_used': datetime}
         self._session_cache: Dict[Tuple[str, str], Dict[str, Any]] = {}
         self._session_lock = threading.Lock()
-        self.TOKEN_TTL_MINUTES = 5  # 5 minut TTL
+        
+        # ZMIANA: Zredukowano TTL do 40 sekund na podstawie analizy logów (token wygasa po ~45-50s)
+        # Traktujemy to jako ABSOLUTE EXPIRY, nie przedłużamy przy odczycie.
+        self.TOKEN_TTL_MINUTES = 0.6  # ok. 36 sekund
         
     def _parse_appointment_date_dt(self, apt: Dict[str, Any]) -> Optional[datetime]:
         """Parsuje datę wizyty do obiektu datetime (z obsługą timezone)."""
@@ -289,8 +292,8 @@ class MedicoverApp:
     
     def _get_cached_session(self, user_email: str, profile: str) -> Optional[str]:
         """
-        Pobiera aktywny token z cache i automatycznie przedłuża jego TTL.
-        Zwraca None jeśli token wygasł lub nie istnieje.
+        Pobiera aktywny token z cache.
+        UWAGA: Nie przedłużamy już TTL przy odczycie, bo tokeny mają sztywne expiration time (ok < 60s).
         """
         key = (user_email, profile)
         with self._session_lock:
@@ -300,10 +303,9 @@ class MedicoverApp:
                 
                 # Sprawdź czy token nie wygasł
                 if now < data['expires_at']:
-                    # TOKEN JEST AKTYWNY - Automatycznie przedłuż TTL
-                    self._session_cache[key]['expires_at'] = now + timedelta(minutes=self.TOKEN_TTL_MINUTES)
+                    # TOKEN JEST JESZCZE WAŻNY
                     self._session_cache[key]['last_used'] = now
-                    self.logger.info(f"♻️ Token cache dla {profile} jest aktywny. TTL przedłużone do {self._session_cache[key]['expires_at'].strftime('%H:%M:%S')}")
+                    self.logger.info(f"♻️ Użycie tokenu z cache (ważny do {data['expires_at'].strftime('%H:%M:%S')})")
                     return data['token']
                 else:
                     # Token wygasł - usuń z cache
@@ -312,7 +314,7 @@ class MedicoverApp:
         return None
 
     def _cache_session(self, user_email: str, profile: str, token: str):
-        """Zapisuje token do cache z czasem ważności 5 minut."""
+        """Zapisuje token do cache z czasem ważności (ok 40s)."""
         key = (user_email, profile)
         now = datetime.now()
         with self._session_lock:
@@ -325,16 +327,10 @@ class MedicoverApp:
 
     def _refresh_token_ttl(self, user_email: str, profile: str):
         """
-        Przedłuża TTL tokenu przy każdym udanym użyciu API.
-        Wywoływana automatycznie po udanych operacjach search/book.
+        Metoda pozostawiona dla kompatybilności, ale wyłączona.
+        Aktywność w API nie przedłuża życia tokena Bearer.
         """
-        key = (user_email, profile)
-        with self._session_lock:
-            if key in self._session_cache:
-                now = datetime.now()
-                self._session_cache[key]['expires_at'] = now + timedelta(minutes=self.TOKEN_TTL_MINUTES)
-                self._session_cache[key]['last_used'] = now
-                self.logger.debug(f"🔄 TTL odświeżone dla {profile}. Nowy czas wygaśnięcia: {self._session_cache[key]['expires_at'].strftime('%H:%M:%S')}")
+        pass
 
     def search_appointments(self, user_email: str = None, profile: str = None, **kwargs) -> List[Dict[str, Any]]:
         if not user_email or not profile: return []
@@ -350,12 +346,12 @@ class MedicoverApp:
         try:
             temp_client = MedicoverClient(client_config)
             
-            # --- SESSION REUSE LOGIC WITH AUTO TTL REFRESH ---
-            cached_token = self._get_cached_session(user_email, profile)  # Automatycznie przedłuża TTL
+            # --- SESSION REUSE LOGIC ---
+            cached_token = self._get_cached_session(user_email, profile)
             is_logged_in = False
 
             if cached_token:
-                self.logger.info(f"♻️ Używam sesji z cache dla {profile}")
+                # self.logger.info(f"♻️ Używam sesji z cache dla {profile}")
                 # Wstrzykujemy token ręcznie
                 if temp_client.api.set_bearer_token(cached_token):
                     temp_client.current_token = cached_token
@@ -380,16 +376,19 @@ class MedicoverApp:
             
             try:
                 found = temp_client.search_appointments(search_params)
-                # Sukces - przedłuż TTL
-                self._refresh_token_ttl(user_email, profile)
+                # Sukces - (nie przedłużamy TTL)
             except AuthenticationException:
-                self.logger.warning(f"⚠️ Token cache wygasł dla {profile}. Ponawiam z pełnym logowaniem...")
+                self.logger.warning(f"⚠️ Token cache wygasł dla {profile} (API 401). Ponawiam z pełnym logowaniem...")
+                
+                # Usuń nieważny token z cache
+                key = (user_email, profile)
+                with self._session_lock:
+                     if key in self._session_cache: del self._session_cache[key]
+
                 # Token z cache nie zadziałał (401). Wymuś pełne logowanie.
                 if temp_client.login(username, password):
                     self._cache_session(user_email, profile, temp_client.current_token)
                     found = temp_client.search_appointments(search_params)
-                    # Sukces po relogowaniu - przedłuż TTL
-                    self._refresh_token_ttl(user_email, profile)
                 else:
                     self.logger.error("❌ Ponowne logowanie nieudane.")
                     return []
@@ -434,12 +433,12 @@ class MedicoverApp:
         try:
             temp_client = MedicoverClient(client_config)
             
-             # --- SESSION REUSE LOGIC WITH AUTO TTL REFRESH ---
-            cached_token = self._get_cached_session(user_email, profile)  # Automatycznie przedłuża TTL
+             # --- SESSION REUSE LOGIC ---
+            cached_token = self._get_cached_session(user_email, profile)
             is_logged_in = False
 
             if cached_token:
-                self.logger.info(f"♻️ (Book) Używam sesji z cache dla {profile}")
+                # self.logger.info(f"♻️ (Book) Używam sesji z cache dla {profile}")
                 if temp_client.api.set_bearer_token(cached_token):
                     temp_client.current_token = cached_token
                     is_logged_in = True
@@ -458,18 +457,12 @@ class MedicoverApp:
 
             try:
                 result = temp_client.book_appointment(appointment_obj)
-                # Sukces - przedłuż TTL
-                if result.get('success'):
-                    self._refresh_token_ttl(user_email, profile)
                 return result
             except AuthenticationException:
                 self.logger.warning(f"⚠️ (Book) Token cache wygasł. Ponawiam logowanie...")
                 if temp_client.login(username, password):
                     self._cache_session(user_email, profile, temp_client.current_token)
                     result = temp_client.book_appointment(appointment_obj)
-                    # Sukces po relogowaniu - przedłuż TTL
-                    if result.get('success'):
-                        self._refresh_token_ttl(user_email, profile)
                     return result
                 else:
                     return {"success": False, "message": "Błąd odświeżania sesji przy rezerwacji"}
