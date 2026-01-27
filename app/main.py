@@ -73,6 +73,25 @@ class MedicoverApp:
             return datetime.fromisoformat(s)
         except Exception:
             return None
+
+    def _is_time_in_range(self, t_val: time, start: Optional[time], end: Optional[time]) -> bool:
+        """Sprawdza czy godzina mieści się w zakresie (z obsługą zakresów przez północ)."""
+        if not start and not end:
+            return True
+        if start and not end:
+            return t_val >= start
+        if end and not start:
+            return t_val <= end
+
+        if not start or not end:
+            return True
+
+        # Standardowy zakres w obrębie doby
+        if start <= end:
+            return start <= t_val <= end
+
+        # Zakres przechodzący przez północ, np. 22:00–06:00 lub 11:00–00:00
+        return t_val >= start or t_val <= end
             
     def find_consecutive_slots(self, appointments: List[Dict[str, Any]]) -> List[Tuple[Dict[str, Any], Dict[str, Any]]]:
         """
@@ -184,8 +203,8 @@ class MedicoverApp:
                     e_parts = specific['end'].split(':')
                     s_time = time(int(s_parts[0]), int(s_parts[1]))
                     e_time = time(int(e_parts[0]), int(e_parts[1]))
-                    
-                    if t < s_time or t > e_time:
+
+                    if not self._is_time_in_range(t, s_time, e_time):
                         self.logger.info(f"-> Odrzucono (Specific Time): {t} outside {s_time}-{e_time}")
                         continue # Poza zakresem specyficznym dla dnia
                     
@@ -195,12 +214,17 @@ class MedicoverApp:
 
             # Jeśli nie znaleziono specyficznego zakresu, użyj globalnego (jeśli zdefiniowany)
             if not specific_range_found:
-                if global_start_time and t < global_start_time:
-                    self.logger.info(f"-> Odrzucono (Global Start): {t} < {global_start_time}")
-                    continue
-                if global_end_time and t > global_end_time:
-                    self.logger.info(f"-> Odrzucono (Global End): {t} > {global_end_time}")
-                    continue
+                if global_start_time and global_end_time:
+                    if not self._is_time_in_range(t, global_start_time, global_end_time):
+                        self.logger.info(f"-> Odrzucono (Global Time): {t} outside {global_start_time}-{global_end_time}")
+                        continue
+                else:
+                    if global_start_time and t < global_start_time:
+                        self.logger.info(f"-> Odrzucono (Global Start): {t} < {global_start_time}")
+                        continue
+                    if global_end_time and t > global_end_time:
+                        self.logger.info(f"-> Odrzucono (Global End): {t} > {global_end_time}")
+                        continue
 
             self.logger.info(f"-> ZAAKCEPTOWANO: {dt}")
             filtered.append(apt)
