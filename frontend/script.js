@@ -381,7 +381,7 @@ function setFiltersEnabled(enabled) {
     state.ui.filtersLocked = locked;
 
     // Filters panel main inputs
-    ['specialtySelect', 'dateFrom', 'dateTo', 'hourFrom', 'hourTo', 'toggleAdvancedFilters', 'excludeDateInput', 'addExcludedDateBtn', 'resetBtn'].forEach(id => {
+    ['specialtySelect', 'dateFrom', 'dateTo', 'timeFrom', 'timeTo', 'toggleAdvancedFilters', 'excludeDateInput', 'addExcludedDateBtn', 'resetBtn'].forEach(id => {
         const el = document.getElementById(id);
         if (el) el.disabled = locked;
     });
@@ -424,24 +424,18 @@ function setSchedulerOptionsEnabled(enabled) {
     });
 }
 
-function pad2(val) {
-    const n = parseInt(val, 10);
-    if (!Number.isFinite(n)) return '';
-    return String(n).padStart(2, '0');
-}
-
 function applyTimeRangeToUI() {
     const start = state.filters?.timeRange?.start;
     const end = state.filters?.timeRange?.end;
 
-    const hourFromEl = document.getElementById('hourFrom');
-    const hourToEl = document.getElementById('hourTo');
+    const timeFromEl = document.getElementById('timeFrom');
+    const timeToEl = document.getElementById('timeTo');
 
-    if (hourFromEl && typeof start === 'string' && start.includes(':')) {
-        hourFromEl.value = pad2(start.split(':')[0]);
+    if (timeFromEl && typeof start === 'string') {
+        timeFromEl.value = start;
     }
-    if (hourToEl && typeof end === 'string' && end.includes(':')) {
-        hourToEl.value = pad2(end.split(':')[0]);
+    if (timeToEl && typeof end === 'string') {
+        timeToEl.value = end;
     }
 }
 
@@ -1213,9 +1207,15 @@ function updateFiltersFromUI() {
     state.filters.dateFrom = document.getElementById('dateFrom').value;
     state.filters.dateTo = document.getElementById('dateTo').value;
 
-    // Time
-    state.filters.timeRange.start = document.getElementById('hourFrom').value + ":00";
-    state.filters.timeRange.end = document.getElementById('hourTo').value + ":00";
+    // Time - UPDATED to use time inputs
+    const timeFromEl = document.getElementById('timeFrom');
+    const timeToEl = document.getElementById('timeTo');
+    if (timeFromEl && timeFromEl.value) {
+        state.filters.timeRange.start = timeFromEl.value;
+    }
+    if (timeToEl && timeToEl.value) {
+        state.filters.timeRange.end = timeToEl.value;
+    }
 }
 
 function renderResults() {
@@ -1311,7 +1311,7 @@ function setupEventListeners() {
     }
 
     // Date/Time changes (persist immediately)
-    ['dateFrom', 'dateTo', 'hourFrom', 'hourTo'].forEach(id => {
+    ['dateFrom', 'dateTo', 'timeFrom', 'timeTo'].forEach(id => {
         const el = document.getElementById(id);
         if (!el) return;
         el.addEventListener('change', () => {
@@ -1467,6 +1467,8 @@ function formatCountdown(nextRunIsoStr) {
     const h = Math.floor(diffSec / 3600);
     const m = Math.floor((diffSec % 3600) / 60);
     const s = diffSec % 60;
+
+    const pad2 = (n) => String(n).padStart(2, '0');
 
     if (h > 0) {
         return `${pad2(h)}:${pad2(m)}:${pad2(s)}`;
@@ -1669,7 +1671,7 @@ function restoreState() {
     if (dateFromEl) dateFromEl.value = state.filters.dateFrom;
     if (dateToEl) dateToEl.value = state.filters.dateTo;
 
-    // Apply time range to UI (hourFrom/hourTo)
+    // Apply time range to UI (timeFrom/timeTo)
     applyTimeRangeToUI();
 
     // Restore other UI elements
