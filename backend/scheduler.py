@@ -5,6 +5,8 @@ Manages background tasks for cyclic appointment checking and auto-booking
 import logging
 import json
 import threading
+import time
+import random
 from pathlib import Path
 from datetime import datetime, timedelta
 from typing import Dict, Any, Optional, List
@@ -103,6 +105,21 @@ class MedifinderScheduler:
             logger.error(f"Błąd planowania zadania {task_id}: {e}")
     
     def _execute_task(self, task_id: str):
+        # --- JITTER LOGIC START ---
+        # Losowe opóźnienie od 1 do 15 sekund, aby rozsunąć zapytania w czasie
+        delay = random.uniform(1, 15)
+        
+        # Pobierz dane zadania (wstępne, przed sync) aby sprawdzić twin mode
+        pre_task_data = self.tasks.get(task_id)
+        
+        # Opcjonalnie: większy delay dla drugiego profilu w trybie Twin
+        if pre_task_data and pre_task_data.get('twin_profile') and str(pre_task_data.get('profile', '')).endswith('9'): 
+             delay += 10
+             
+        logger.info(f"⏳ [Profile {task_id}] Oczekiwanie {delay:.2f}s przed startem (Jitter)...")
+        time.sleep(delay)
+        # --- JITTER LOGIC END ---
+
         self._sync_tasks_from_file()
         if task_id not in self.tasks: return
         task_data = self.tasks[task_id]
