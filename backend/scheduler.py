@@ -106,16 +106,10 @@ class MedifinderScheduler:
     
     def _execute_task(self, task_id: str):
         # --- JITTER LOGIC START ---
-        # Losowe opóźnienie od 1 do 15 sekund, aby rozsunąć zapytania w czasie
         delay = random.uniform(1, 15)
-        
-        # Pobierz dane zadania (wstępne, przed sync) aby sprawdzić twin mode
         pre_task_data = self.tasks.get(task_id)
-        
-        # Opcjonalnie: większy delay dla drugiego profilu w trybie Twin
         if pre_task_data and pre_task_data.get('twin_profile') and str(pre_task_data.get('profile', '')).endswith('9'): 
              delay += 10
-             
         logger.info(f"⏳ [Profile {task_id}] Oczekiwanie {delay:.2f}s przed startem (Jitter)...")
         time.sleep(delay)
         # --- JITTER LOGIC END ---
@@ -127,6 +121,21 @@ class MedifinderScheduler:
             try: self.scheduler.remove_job(task_id)
             except: pass
             return
+
+        # --- SMART BACKOFF CHECK (COOLDOWN) ---
+        cooldown_until_str = task_data.get('cooldown_until')
+        if cooldown_until_str:
+            try:
+                cooldown_until = datetime.fromisoformat(cooldown_until_str)
+                if datetime.now() < cooldown_until:
+                    logger.warning(f"❄️ [{task_id}] Zadanie w trybie COOLDOWN do {cooldown_until.strftime('%H:%M:%S')} (po błędzie 429). Pomijam.")
+                    return # Skip execution
+                else:
+                    # Cooldown ended
+                    logger.info(f"🔥 [{task_id}] Koniec COOLDOWN. Wznawiam sprawdzanie.")
+                    self.tasks[task_id]['cooldown_until'] = None # Clear it
+            except ValueError:
+                self.tasks[task_id]['cooldown_until'] = None
 
         user_email = task_data['user_email']
         profile = task_data['profile']
@@ -145,7 +154,7 @@ class MedifinderScheduler:
                     self._save_tasks()
                     return
             except ValueError:
-                pass # Ignorujemy błędy parsowania daty, zadanie biegnie dalej
+                pass 
 
         # --- NEW: Twin Booking Params ---
         twin_profile = task_data.get('twin_profile')
@@ -260,8 +269,17 @@ class MedifinderScheduler:
             self._save_tasks()
             
         except Exception as e:
-            logger.error(f"❌ [{task_id}] Błąd: {e}", exc_info=True)
-            self.tasks[task_id]['last_error'] = {'timestamp': datetime.now().isoformat(), 'error': str(e)}
+            error_str = str(e)
+            logger.error(f"❌ [{task_id}] Błąd: {error_str}", exc_info=True)
+            self.tasks[task_id]['last_error'] = {'timestamp': datetime.now().isoformat(), 'error': error_str}
+            
+            # --- SMART BACKOFF (429 handling) ---
+            if "429" in error_str or "Rate limit" in error_str or "RateLimitException" in error_str:
+                cooldown_minutes = 20
+                cooldown_until = datetime.now() + timedelta(minutes=cooldown_minutes)
+                self.tasks[task_id]['cooldown_until'] = cooldown_until.isoformat()
+                logger.warning(f"⛔️ [{task_id}] WYKRYTO TWARDĄ BLOKADĘ (429). Pauza do {cooldown_until.strftime('%H:%M:%S')} ({cooldown_minutes} min).")
+            
             self._save_tasks()
     
     def start_task(self, user_email: str, profile: str, search_params: Dict[str, Any], 
@@ -298,7 +316,8 @@ class MedifinderScheduler:
             'active': True,
             'created_at': now_dt.isoformat(),
             'expires_at': expires_at.isoformat(), # Zapisujemy czas wygaśnięcia
-            'runs_count': 0
+            'runs_count': 0,
+            'cooldown_until': None # Reset cooldown on new start
         }
         
         self.tasks[task_id] = task_data
