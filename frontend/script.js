@@ -439,10 +439,45 @@ function applyTimeRangeToUI() {
     }
 }
 
+// Generate Time Options for Selects
+function populateTimeSelect(selectElement, defaultValue = '') {
+    if (!selectElement) return;
+    selectElement.innerHTML = '';
+    
+    // Create options every 15 minutes
+    for (let h = 0; h < 24; h++) {
+        for (let m = 0; m < 60; m += 15) {
+            const hh = String(h).padStart(2, '0');
+            const mm = String(m).padStart(2, '0');
+            const timeVal = `${hh}:${mm}`;
+            const opt = document.createElement('option');
+            opt.value = timeVal;
+            opt.textContent = timeVal;
+            selectElement.appendChild(opt);
+        }
+    }
+    
+    // Add end of day if needed
+    if (!selectElement.querySelector('option[value="23:59"]')) {
+         const opt = document.createElement('option');
+         opt.value = '23:59';
+         opt.textContent = '23:59';
+         selectElement.appendChild(opt);
+    }
+
+    if (defaultValue) {
+        selectElement.value = defaultValue;
+    }
+}
+
 // --- INIT ---
 document.addEventListener('DOMContentLoaded', async () => {
     checkAuthStatus();
     setupEventListeners();
+
+    // Populate global time selects
+    populateTimeSelect(document.getElementById('timeFrom'), '04:00');
+    populateTimeSelect(document.getElementById('timeTo'), '22:00');
 
     // Unlock audio on first user gesture so beeps can work even in background.
     document.addEventListener('click', unlockAudio, { once: true });
@@ -748,22 +783,33 @@ function renderDayTimeRanges(days) {
 
         const saved = state.filters.dayTimeRanges[idx] || {};
 
-        row.innerHTML = `
-            <span style="width: 30px; font-weight:500;">${dayName}</span>
-            <input type="time" class="form-control form-control-sm" style="width:80px" data-day="${idx}" data-type="start" value="${saved.start || ''}">
-            <span>-</span>
-            <input type="time" class="form-control form-control-sm" style="width:80px" data-day="${idx}" data-type="end" value="${saved.end || ''}">
-        `;
+        // Use select elements instead of input time to enforce 24h
+        const startSelect = document.createElement('select');
+        startSelect.className = 'form-control form-control-sm';
+        startSelect.style.width = '80px';
+        startSelect.dataset.day = idx;
+        startSelect.dataset.type = 'start';
+        populateTimeSelect(startSelect, saved.start);
 
-        const startIn = row.querySelector('[data-type="start"]');
-        const endIn = row.querySelector('[data-type="end"]');
-        startIn.disabled = state.ui.filtersLocked;
-        endIn.disabled = state.ui.filtersLocked;
+        const endSelect = document.createElement('select');
+        endSelect.className = 'form-control form-control-sm';
+        endSelect.style.width = '80px';
+        endSelect.dataset.day = idx;
+        endSelect.dataset.type = 'end';
+        populateTimeSelect(endSelect, saved.end);
+
+        row.innerHTML = `<span style="width: 30px; font-weight:500;">${dayName}</span>`;
+        row.appendChild(startSelect);
+        row.insertAdjacentHTML('beforeend', '<span>-</span>');
+        row.appendChild(endSelect);
+
+        startSelect.disabled = state.ui.filtersLocked;
+        endSelect.disabled = state.ui.filtersLocked;
 
         const updateState = () => {
             if (state.ui.filtersLocked) return;
-            const s = startIn.value;
-            const e = endIn.value;
+            const s = startSelect.value;
+            const e = endSelect.value;
             if (s && e) {
                 state.filters.dayTimeRanges[idx] = { start: s, end: e };
             } else {
@@ -772,8 +818,8 @@ function renderDayTimeRanges(days) {
             saveState();
         };
 
-        startIn.addEventListener('change', updateState);
-        endIn.addEventListener('change', updateState);
+        startSelect.addEventListener('change', updateState);
+        endSelect.addEventListener('change', updateState);
 
         container.appendChild(row);
     });
