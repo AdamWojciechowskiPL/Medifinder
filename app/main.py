@@ -430,8 +430,17 @@ class MedicoverApp:
         
         try:
             found = temp_client.search_appointments(search_params)
-            # Sukces - odświeżamy TTL dla username
-            self._refresh_token_ttl(user_email, username)
+            
+            # --- FIX START: Aktualizacja cache jeśli klient zmienił token ---
+            # Jeśli MedicoverClient wykonał re-login w tle, musimy zapisać nowy token do cache
+            if temp_client.current_token and temp_client.current_token != cached_token:
+                self.logger.info(f"🔄 Token zmieniony przez klienta (Internal Relogin). Aktualizacja cache dla {user_email}_{username}.")
+                self._cache_session(user_email, username, temp_client.current_token)
+            else:
+                # Sukces na starym tokenie - tylko odświeżamy TTL
+                self._refresh_token_ttl(user_email, username)
+            # --- FIX END ---
+
         except AuthenticationException:
             self.logger.warning(f"⚠️ Token cache wygasł dla {user_email}_{username} (API 401). Próba relogowania (z blokadą)...")
             
