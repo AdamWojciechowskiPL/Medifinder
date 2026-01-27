@@ -10,16 +10,32 @@ Zaprojektowana do działania w chmurze (Railway.app), oferuje dostęp 24/7, auto
 *   **Wieloprofilowość**: Obsługa wielu kont Medicover (rodzina/znajomi) z izolacją sesji.
 *   **Inteligentne Filtrowanie**: Wyszukiwanie po specjalnościach, konkretnych lekarzach, placówkach i przedziałach godzinowych.
 *   **Szyfrowanie**: Hasła przechowywane lokalnie (AES-256), nie wysyłane do zewnętrznych serwerów (poza Medicover).
+*   **Smart Session Management**: Automatyczne przedłużanie sesji przy każdym żądaniu API (uniknięcie nadmiarowych logowań).
 *   **Cloud Native**: Zoptymalizowana pod konteneryzację (Docker) i wdrożenie na Railway.app.
 
-## 🏗️ Architektura
+## 🏛️ Architektura
 
 Aplikacja działa jako pojedynczy serwis (Monolit) w kontenerze Docker:
 *   **Backend**: Python 3.11 + Flask (REST API).
 *   **Core**: Selenium WebDriver (Headless Chrome) do interakcji z Medicover.
+*   **Session Management**: Bearer token z 5-minutowym TTL, automatycznie odświeżanym przy użyciu.
 *   **Task Queue**: Wewnętrzny APScheduler do zadań w tle (nie blokuje API).
 *   **Frontend**: Statyczne pliki HTML/JS serwowane bezpośrednio przez Flask.
 *   **Storage**: Wolumeny dyskowe do trwałego zapisu konfiguracji (`/config`).
+
+### ♻️ Zarządzanie Sesjami (Bearer Tokens)
+
+Aplikacja implementuje inteligentny system cache sesji:
+
+*   **TTL (Time To Live)**: Każdy bearer token ma 5-minutowy czas ważności.
+*   **Automatyczne Odświeżanie**: Przy każdym udanym użyciu tokenu (search/book) TTL jest automatycznie przedłużane o kolejne 5 minut.
+*   **Lazy Authentication**: Jeśli token wygasł, system automatycznie wykonuje relogowanie w tle bez przerywania operacji użytkownika.
+*   **Izolacja Sesji**: Każdy profil ma własną, niezależną sesję z oddzielną ścieżką wygasania.
+
+**Korzyści:**
+- Minimalizacja użycia Selenium (logowanie tylko gdy konieczne)
+- Szybsze odpowiedzi API (brak opóźnień związanych z przegladarką)
+- Lepsza stabilność dla schedulerów (długie zadania wykorzystują tę samą sesję)
 
 ## 🚀 Wdrożenie (Railway)
 
@@ -75,6 +91,7 @@ Wymagany Python 3.11+ oraz Google Chrome.
 
 *   Hasła do profili Medicover są szyfrowane kluczem AES-256 generowanym przy pierwszym uruchomieniu (`config/profile_key.key`).
 *   Komunikacja z Medicover odbywa się przez izolowaną sesję przeglądarki.
+*   Bearer tokens są przechowywane w pamięci (nie na dysku) z automatycznym wygasaniem.
 *   Żadne dane medyczne nie są przesyłane do twórców aplikacji.
 
 ---
