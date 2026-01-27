@@ -40,15 +40,26 @@ class MedicoverApp:
         self.config_dir = config_dir
         self._initialize_default_profile_and_client()
         
-        # --- Cache sesji z automatycznym odświeżaniem TTL ---
-        # Key: (user_email, profile_login) -> Value: {'token': str, 'expires_at': datetime, 'last_used': datetime}
-        self._session_cache: Dict[Tuple[str, str], Dict[str, Any]] = {}
+        # --- Cache sesji ---
+        # ZMIANA: Kluczem jest teraz tylko user_email, bo token jest na konto, a nie na profil.
+        # Key: user_email -> Value: {'token': str, 'expires_at': datetime, 'last_used': datetime}
+        self._session_cache: Dict[str, Dict[str, Any]] = {}
         self._session_lock = threading.Lock()
         
-        # ZMIANA: Zredukowano TTL do 40 sekund na podstawie analizy logów (token wygasa po ~45-50s)
-        # Traktujemy to jako ABSOLUTE EXPIRY, nie przedłużamy przy odczycie.
-        self.TOKEN_TTL_MINUTES = 0.6  # ok. 36 sekund
+        # ZMIANA: Blokady per użytkownik, aby uniknąć równoczesnego logowania
+        self._user_locks: Dict[str, threading.Lock] = {}
+        self._user_locks_lock = threading.Lock() # Do ochrony słownika blokad
         
+        # ZMIANA: Przywracamy dłuższy TTL (np. 14 minut, standard to ok. 15-20 min idle)
+        self.TOKEN_TTL_MINUTES = 14
+        
+    def _get_user_lock(self, user_email: str) -> threading.Lock:
+        """Zwraca (tworząc w razie potrzeby) blokadę dla danego użytkownika."""
+        with self._user_locks_lock:
+            if user_email not in self._user_locks:
+                self._user_locks[user_email] = threading.Lock()
+            return self._user_locks[user_email]
+
     def _parse_appointment_date_dt(self, apt: Dict[str, Any]) -> Optional[datetime]:
         """Parsuje datę wizyty do obiektu datetime (z obsługą timezone)."""
         s = apt.get('appointmentDate')
@@ -290,186 +301,212 @@ class MedicoverApp:
     def get_current_profile(self) -> Optional[str]: return self.current_profile
     def add_profile(self, user_email: str, login: str, password: str, name: str, is_child_account: bool = False) -> bool: return self.profile_manager.add_profile(user_email, login, password, name, is_child_account)
     
-    def _get_cached_session(self, user_email: str, profile: str) -> Optional[str]:
+    def _get_cached_session(self, user_email: str) -> Optional[str]:
         """
-        Pobiera aktywny token z cache.
-        UWAGA: Nie przedłużamy już TTL przy odczycie, bo tokeny mają sztywne expiration time (ok < 60s).
+        Pobiera aktywny token z cache dla użytkownika.
+        Ignoruje profil, ponieważ token jest przypisany do konta (email).
         """
-        key = (user_email, profile)
         with self._session_lock:
-            if key in self._session_cache:
-                data = self._session_cache[key]
+            if user_email in self._session_cache:
+                data = self._session_cache[user_email]
                 now = datetime.now()
                 
                 # Sprawdź czy token nie wygasł
                 if now < data['expires_at']:
-                    # TOKEN JEST JESZCZE WAŻNY
-                    self._session_cache[key]['last_used'] = now
-                    self.logger.info(f"♻️ Użycie tokenu z cache (ważny do {data['expires_at'].strftime('%H:%M:%S')})")
+                    # TOKEN JEST JESZCZE WAŻNY - Przedłużamy TTL (sliding window)
+                    self._session_cache[user_email]['expires_at'] = now + timedelta(minutes=self.TOKEN_TTL_MINUTES)
+                    self._session_cache[user_email]['last_used'] = now
+                    self.logger.info(f"♻️ Użycie tokenu z cache dla {user_email} (przedłużono do {self._session_cache[user_email]['expires_at'].strftime('%H:%M:%S')})")
                     return data['token']
                 else:
                     # Token wygasł - usuń z cache
-                    self.logger.info(f"⏰ Token cache dla {profile} wygasł. Usuwam z cache.")
-                    del self._session_cache[key]
+                    self.logger.info(f"⏰ Token cache dla {user_email} wygasł. Usuwam z cache.")
+                    del self._session_cache[user_email]
         return None
 
-    def _cache_session(self, user_email: str, profile: str, token: str):
-        """Zapisuje token do cache z czasem ważności (ok 40s)."""
-        key = (user_email, profile)
+    def _cache_session(self, user_email: str, token: str):
+        """Zapisuje token do cache dla użytkownika."""
         now = datetime.now()
         with self._session_lock:
-            self._session_cache[key] = {
+            self._session_cache[user_email] = {
                 'token': token,
                 'expires_at': now + timedelta(minutes=self.TOKEN_TTL_MINUTES),
                 'last_used': now
             }
-            self.logger.info(f"💾 Token cache dla {profile} zapisany. Wygasa: {self._session_cache[key]['expires_at'].strftime('%H:%M:%S')}")
+            self.logger.info(f"💾 Token cache dla {user_email} zapisany. Wygasa: {self._session_cache[user_email]['expires_at'].strftime('%H:%M:%S')}")
 
-    def _refresh_token_ttl(self, user_email: str, profile: str):
+    def _refresh_token_ttl(self, user_email: str):
         """
-        Metoda pozostawiona dla kompatybilności, ale wyłączona.
-        Aktywność w API nie przedłuża życia tokena Bearer.
+        Przedłuża TTL tokenu po udanym użyciu API.
         """
-        pass
+        with self._session_lock:
+            if user_email in self._session_cache:
+                now = datetime.now()
+                self._session_cache[user_email]['expires_at'] = now + timedelta(minutes=self.TOKEN_TTL_MINUTES)
+                self._session_cache[user_email]['last_used'] = now
 
     def search_appointments(self, user_email: str = None, profile: str = None, **kwargs) -> List[Dict[str, Any]]:
         if not user_email or not profile: return []
         
-        credentials = self.profile_manager.get_credentials(user_email, profile)
-        if not credentials: return []
-        username, password = credentials
+        # --- SYNCHRONIZACJA LOGOWANIA PER USER ---
+        # Zapobiega równoległym logowaniom, które unieważniają nawzajem tokeny
+        user_lock = self._get_user_lock(user_email)
         
-        client_config = self.config.data.copy()
-        client_config['username'] = username
-        client_config['password'] = password
-        
-        try:
-            temp_client = MedicoverClient(client_config)
+        # Używamy blokady tylko na czas sprawdzenia/uzyskania sesji, a nie całego requestu
+        with user_lock:
+            credentials = self.profile_manager.get_credentials(user_email, profile)
+            if not credentials: return []
+            username, password = credentials
             
-            # --- SESSION REUSE LOGIC ---
-            cached_token = self._get_cached_session(user_email, profile)
-            is_logged_in = False
-
-            if cached_token:
-                # self.logger.info(f"♻️ Używam sesji z cache dla {profile}")
-                # Wstrzykujemy token ręcznie
-                if temp_client.api.set_bearer_token(cached_token):
-                    temp_client.current_token = cached_token
-                    is_logged_in = True
-            
-            if not is_logged_in:
-                self.logger.info(f"🔌 Logowanie przez Selenium dla {profile}...")
-                if temp_client.login(username, password):
-                    self._cache_session(user_email, profile, temp_client.current_token)
-                    is_logged_in = True
-                else:
-                    return []
-
-            search_params: Dict[str, Any] = {}
-            if kwargs.get('specialty_ids'): search_params['SpecialtyIds'] = kwargs['specialty_ids']
-            if kwargs.get('doctor_ids'): search_params['DoctorIds'] = kwargs['doctor_ids']
-            if kwargs.get('clinic_ids'): search_params['ClinicIds'] = kwargs['clinic_ids']
-            start_date = kwargs.get('start_date')
-            end_date = kwargs.get('end_date')
-            if start_date: search_params['StartTime'] = start_date
-            if end_date: search_params['EndTime'] = end_date
+            client_config = self.config.data.copy()
+            client_config['username'] = username
+            client_config['password'] = password
             
             try:
-                found = temp_client.search_appointments(search_params)
-                # Sukces - (nie przedłużamy TTL)
-            except AuthenticationException:
-                self.logger.warning(f"⚠️ Token cache wygasł dla {profile} (API 401). Ponawiam z pełnym logowaniem...")
+                temp_client = MedicoverClient(client_config)
                 
-                # Usuń nieważny token z cache
-                key = (user_email, profile)
-                with self._session_lock:
-                     if key in self._session_cache: del self._session_cache[key]
+                # --- SESSION REUSE LOGIC ---
+                cached_token = self._get_cached_session(user_email)
+                is_logged_in = False
 
-                # Token z cache nie zadziałał (401). Wymuś pełne logowanie.
-                if temp_client.login(username, password):
-                    self._cache_session(user_email, profile, temp_client.current_token)
-                    found = temp_client.search_appointments(search_params)
+                if cached_token:
+                    if temp_client.api.set_bearer_token(cached_token):
+                        temp_client.current_token = cached_token
+                        is_logged_in = True
+                
+                if not is_logged_in:
+                    self.logger.info(f"🔌 Logowanie przez Selenium dla {user_email}...")
+                    if temp_client.login(username, password):
+                        self._cache_session(user_email, temp_client.current_token)
+                        is_logged_in = True
+                    else:
+                        return []
+            except Exception as e:
+                self.logger.error(f"Błąd inicjalizacji klienta/logowania: {e}")
+                return []
+
+        # Request do API robimy już poza blokadą, ale na tokenie który jest (miejmy nadzieję) stabilny
+        search_params: Dict[str, Any] = {}
+        if kwargs.get('specialty_ids'): search_params['SpecialtyIds'] = kwargs['specialty_ids']
+        if kwargs.get('doctor_ids'): search_params['DoctorIds'] = kwargs['doctor_ids']
+        if kwargs.get('clinic_ids'): search_params['ClinicIds'] = kwargs['clinic_ids']
+        start_date = kwargs.get('start_date')
+        end_date = kwargs.get('end_date')
+        if start_date: search_params['StartTime'] = start_date
+        if end_date: search_params['EndTime'] = end_date
+        
+        try:
+            found = temp_client.search_appointments(search_params)
+            # Sukces - odświeżamy TTL
+            self._refresh_token_ttl(user_email)
+        except AuthenticationException:
+            self.logger.warning(f"⚠️ Token cache wygasł dla {user_email} (API 401). Próba relogowania (z blokadą)...")
+            
+            # Jeśli token wygasł, musimy ponownie wejść w sekcję krytyczną i przelogować
+            with user_lock:
+                # Sprawdź czy ktoś inny już nie odświeżył w międzyczasie
+                cached_token_now = self._get_cached_session(user_email)
+                if cached_token_now and cached_token_now != temp_client.current_token:
+                    # Ktoś już odświeżył token! Użyjmy nowego.
+                    self.logger.info("Token został odświeżony przez inny wątek. Ponawiam na nowym tokenie.")
+                    if temp_client.api.set_bearer_token(cached_token_now):
+                         found = temp_client.search_appointments(search_params)
+                    else:
+                         found = []
                 else:
-                    self.logger.error("❌ Ponowne logowanie nieudane.")
-                    return []
+                    # Nadal stary/brak tokenu - robimy twardy relogin
+                    # Usuń stary
+                    with self._session_lock:
+                         if user_email in self._session_cache: del self._session_cache[user_email]
 
-            if not found: return []
+                    if temp_client.login(username, password):
+                        self._cache_session(user_email, temp_client.current_token)
+                        found = temp_client.search_appointments(search_params)
+                    else:
+                        self.logger.error("❌ Ponowne logowanie nieudane.")
+                        return []
 
-            filtered = self._filter_results_by_date_range(found, start_date, end_date)
-            
-            excluded_dates_raw = kwargs.get('excluded_dates')
-            excluded_dates = []
-            if excluded_dates_raw:
-                try: 
-                    excluded_dates = [date.fromisoformat(d) for d in excluded_dates_raw]
-                except Exception as e: 
-                    self.logger.error(f"Error parsing excluded_dates: {e}")
+        if not found: return []
 
-            filtered = self._filter_results_by_preferences(
-                filtered, 
-                kwargs.get('preferred_days'), 
-                kwargs.get('time_range'),
-                kwargs.get('day_time_ranges'),
-                excluded_dates
-            )
+        filtered = self._filter_results_by_date_range(found, start_date, end_date)
+        
+        excluded_dates_raw = kwargs.get('excluded_dates')
+        excluded_dates = []
+        if excluded_dates_raw:
+            try: 
+                excluded_dates = [date.fromisoformat(d) for d in excluded_dates_raw]
+            except Exception as e: 
+                self.logger.error(f"Error parsing excluded_dates: {e}")
 
-            if filtered: self._update_data_from_appointments(filtered)
-            return filtered
-            
-        except Exception as e:
-            self.logger.error(f"Błąd podczas wyszukiwania: {e}", exc_info=True)
-            return []
+        filtered = self._filter_results_by_preferences(
+            filtered, 
+            kwargs.get('preferred_days'), 
+            kwargs.get('time_range'),
+            kwargs.get('day_time_ranges'),
+            excluded_dates
+        )
+
+        if filtered: self._update_data_from_appointments(filtered)
+        return filtered
 
     def book_appointment(self, user_email: str, profile: str, appointment_id: Any, booking_string: str = None) -> Dict[str, Any]:
         if not user_email or not profile: return {"success": False, "message": "Brak danych profilu"}
-        credentials = self.profile_manager.get_credentials(user_email, profile)
-        if not credentials: return {"success": False, "message": "Błąd poświadczeń"}
-        username, password = credentials
         
-        client_config = self.config.data.copy()
-        client_config['username'] = username
-        client_config['password'] = password
-        
-        try:
-            temp_client = MedicoverClient(client_config)
+        user_lock = self._get_user_lock(user_email)
+        with user_lock:
+            credentials = self.profile_manager.get_credentials(user_email, profile)
+            if not credentials: return {"success": False, "message": "Błąd poświadczeń"}
+            username, password = credentials
             
-             # --- SESSION REUSE LOGIC ---
-            cached_token = self._get_cached_session(user_email, profile)
-            is_logged_in = False
-
-            if cached_token:
-                # self.logger.info(f"♻️ (Book) Używam sesji z cache dla {profile}")
-                if temp_client.api.set_bearer_token(cached_token):
-                    temp_client.current_token = cached_token
-                    is_logged_in = True
+            client_config = self.config.data.copy()
+            client_config['username'] = username
+            client_config['password'] = password
             
-            if not is_logged_in:
-                 self.logger.info(f"🔌 (Book) Logowanie przez Selenium dla {profile}...")
-                 if temp_client.login(username, password):
-                    self._cache_session(user_email, profile, temp_client.current_token)
-                 else:
-                    return {"success": False, "message": "Błąd logowania"}
-            
-            appointment_obj = {}
-            if booking_string: appointment_obj["bookingString"] = booking_string
-            if appointment_id: appointment_obj["id"] = appointment_id
-            if not appointment_obj.get("bookingString"): return {"success": False, "message": "Brak bookingString"}
-
             try:
-                result = temp_client.book_appointment(appointment_obj)
-                return result
-            except AuthenticationException:
-                self.logger.warning(f"⚠️ (Book) Token cache wygasł. Ponawiam logowanie...")
-                if temp_client.login(username, password):
-                    self._cache_session(user_email, profile, temp_client.current_token)
-                    result = temp_client.book_appointment(appointment_obj)
-                    return result
-                else:
-                    return {"success": False, "message": "Błąd odświeżania sesji przy rezerwacji"}
+                temp_client = MedicoverClient(client_config)
+                
+                # --- SESSION REUSE LOGIC ---
+                cached_token = self._get_cached_session(user_email)
+                is_logged_in = False
 
-        except Exception as e:
-            self.logger.error(f"Błąd rezerwacji: {e}")
-            return {"success": False, "message": str(e)}
+                if cached_token:
+                    if temp_client.api.set_bearer_token(cached_token):
+                        temp_client.current_token = cached_token
+                        is_logged_in = True
+                
+                if not is_logged_in:
+                    self.logger.info(f"🔌 (Book) Logowanie przez Selenium dla {user_email}...")
+                    if temp_client.login(username, password):
+                        self._cache_session(user_email, temp_client.current_token)
+                        is_logged_in = True
+                    else:
+                        return {"success": False, "message": "Błąd logowania"}
+            except Exception as e:
+                return {"success": False, "message": f"Błąd init: {e}"}
+
+        appointment_obj = {}
+        if booking_string: appointment_obj["bookingString"] = booking_string
+        if appointment_id: appointment_obj["id"] = appointment_id
+        if not appointment_obj.get("bookingString"): return {"success": False, "message": "Brak bookingString"}
+
+        try:
+            result = temp_client.book_appointment(appointment_obj)
+            return result
+        except AuthenticationException:
+            # Retry logic z blokadą...
+            with user_lock:
+                 # Sprawdź ponownie cache
+                 cached_token_now = self._get_cached_session(user_email)
+                 if cached_token_now and cached_token_now != temp_client.current_token:
+                      temp_client.api.set_bearer_token(cached_token_now)
+                      return temp_client.book_appointment(appointment_obj)
+
+                 self.logger.warning(f"⚠️ (Book) Token cache wygasł. Ponawiam logowanie...")
+                 if temp_client.login(username, password):
+                    self._cache_session(user_email, temp_client.current_token)
+                    return temp_client.book_appointment(appointment_obj)
+                 else:
+                    return {"success": False, "message": "Błąd odświeżania sesji przy rezerwacji"}
 
     def run_gui(self):
         try:
