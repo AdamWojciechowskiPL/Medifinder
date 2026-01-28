@@ -85,11 +85,11 @@ class MedicoverAuthenticator:
             return True
         except TimeoutException:
             logger.error(f"Nie udało się doczekać na URL zawierający '{self.SUCCESS_URL_SUBSTRING}'.")
-            logger.error(f"Ostateczny URL: {driver.current_url}")
+            logger.debug(f"Ostateczny URL: {driver.current_url}") # Zmiana na DEBUG
             return False
 
     def _extract_bearer_token(self, driver: webdriver.Chrome) -> Optional[str]:
-        logger.info("Próba wyodrębnienia tokenu z localStorage...")
+        logger.debug("Próba wyodrębnienia tokenu z localStorage...") # Zmiana na DEBUG
         oidc_storage_key = "oidc.user:https://login-online24.medicover.pl/:web"
         
         # ZMIANA: Skrócono czas oczekiwania z 5 do 2 sekund.
@@ -105,7 +105,8 @@ class MedicoverAuthenticator:
             access_token = oidc_data.get('access_token')
 
             if access_token and isinstance(access_token, str) and len(access_token) > 50:
-                logger.info(f"Znaleziono 'access_token' o długości {len(access_token)}.")
+                # Usunięto logowanie długości tokenu
+                logger.info("Znaleziono 'access_token'.")
                 return access_token
             
             id_token = oidc_data.get('id_token')
