@@ -58,6 +58,12 @@ class MedicoverClient:
         # Domyślne credentials (fallback)
         self.default_username: Optional[str] = config_data.get("username")
         self.default_password: Optional[str] = config_data.get("password")
+        
+    def _mask_text(self, text: str, visible_chars: int = 3) -> str:
+        """Maskuje tekst (np. login) zostawiając ostatnie znaki."""
+        if not text: return "None"
+        if len(text) <= visible_chars: return "***"
+        return "***" + text[-visible_chars:]
 
     # -----------------------------
     # Backward compatibility layer
@@ -200,8 +206,9 @@ class MedicoverClient:
                 progress_callback=progress_callback,
             )
 
+            masked_user = self._mask_text(username)
             self.logger.info(
-                f"Rozpoczynanie logowania dla profilu {profile_id} (użytkownik {username})..."
+                f"Rozpoczynanie logowania dla profilu {profile_id} (użytkownik {masked_user})..."
             )
 
             token = self.authenticator.login(username, password)
