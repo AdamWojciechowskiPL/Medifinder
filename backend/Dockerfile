@@ -52,6 +52,6 @@ HEALTHCHECK --interval=30s --timeout=10s --start-period=10s --retries=3 \
 # Startujemy z katalogu backend
 WORKDIR /app/backend
 
-# KLUCZOWA ZMIANA: Użyj zmiennej środowiskowej PORT z Railway
-# Force 1 worker to avoid split-brain scheduler issues
-CMD gunicorn --bind 0.0.0.0:${PORT:-5000} --workers 1 --timeout 120 --access-logfile - --error-logfile - main:app
+# Użyj config file dla Gunicorn - lepsza kontrola nad logami
+# capture-output zapewnia, że Python printy/logi trafiają do stdout
+CMD gunicorn -c gunicorn_config.py --bind 0.0.0.0:${PORT:-5000} --capture-output --enable-stdio-inheritance main:app
