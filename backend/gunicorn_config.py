@@ -11,7 +11,7 @@ keepalive = 5
 # Logging configuration
 accesslog = "-"  # stdout
 errorlog = "-"   # stdout
-loglevel = "debug"  # CRITICAL
+loglevel = "info"  # Changed from debug to info
 capture_output = True
 enable_stdio_inheritance = True
 
