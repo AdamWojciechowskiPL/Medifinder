@@ -406,9 +406,9 @@ class MedicoverApp:
                 is_logged_in = False
 
                 if cached_token:
-                    if temp_client.api.set_bearer_token(cached_token):
-                        temp_client.current_token = cached_token
-                        is_logged_in = True
+                    # FIX: Bezpośrednie użycie setter-a current_token zamiast wywołania usuniętej metody api.set_bearer_token
+                    temp_client.current_token = cached_token
+                    is_logged_in = True
                 
                 if not is_logged_in:
                     self.logger.info(f"🔌 Logowanie przez Selenium dla {user_email} (Login: {username})...")
@@ -454,10 +454,10 @@ class MedicoverApp:
                 if cached_token_now and cached_token_now != temp_client.current_token:
                     # Ktoś już odświeżył token! Użyjmy nowego.
                     self.logger.info("Token został odświeżony przez inny wątek. Ponawiam na nowym tokenie.")
-                    if temp_client.api.set_bearer_token(cached_token_now):
-                         found = temp_client.search_appointments(search_params)
-                    else:
-                         found = []
+                    
+                    # FIX: Bezpośrednie przypisanie zamiast set_bearer_token
+                    temp_client.current_token = cached_token_now
+                    found = temp_client.search_appointments(search_params)
                 else:
                     # Nadal stary/brak tokenu - robimy twardy relogin
                     # Usuń stary
@@ -517,9 +517,9 @@ class MedicoverApp:
                 is_logged_in = False
 
                 if cached_token:
-                    if temp_client.api.set_bearer_token(cached_token):
-                        temp_client.current_token = cached_token
-                        is_logged_in = True
+                    # FIX: Bezpośrednie przypisanie zamiast set_bearer_token
+                    temp_client.current_token = cached_token
+                    is_logged_in = True
                 
                 if not is_logged_in:
                     self.logger.info(f"🔌 (Book) Logowanie przez Selenium dla {user_email} (Login: {username})...")
@@ -545,7 +545,8 @@ class MedicoverApp:
                  # Sprawdź ponownie cache
                  cached_token_now = self._get_cached_session(user_email, username)
                  if cached_token_now and cached_token_now != temp_client.current_token:
-                      temp_client.api.set_bearer_token(cached_token_now)
+                      # FIX: Bezpośrednie przypisanie zamiast set_bearer_token
+                      temp_client.current_token = cached_token_now
                       return temp_client.book_appointment(appointment_obj)
 
                  self.logger.warning(f"⚠️ (Book) Token cache wygasł dla {user_email}_{username}. Ponawiam logowanie...")
