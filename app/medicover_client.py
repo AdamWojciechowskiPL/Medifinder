@@ -50,7 +50,7 @@ class MedicoverClient:
         self.formatter = AppointmentFormatter()
 
         # KRYTYCZNE: default_profile_id MUSI być ustawione na realny ID z config
-        # Nie może być 0, chyba że rzeczywiście w config jest 0
+        # Jeśli jest 0, to operacje wymagające domyślnego profilu będą rzucać błędem.
         self.default_profile_id: int = int(config_data.get("profile_id", 0) or 0)
 
         # --- Zarządzanie stanem sesji PER PROFIL ---
@@ -71,58 +71,13 @@ class MedicoverClient:
         if len(text_str) <= visible_chars: return "***"
         return "***" + text_str[-visible_chars:]
 
-    # -----------------------------
-    # Backward compatibility layer
-    # -----------------------------
-
-    @property
-    def current_token(self) -> Optional[str]:
-        """Wsteczna kompatybilność: zwraca token dla default_profile_id."""
-        return self.get_token(self.default_profile_id)
-
-    @current_token.setter
-    def current_token(self, token: Optional[str]) -> None:
-        """
-        Wsteczna kompatybilność: ustawia/usuwa token dla default_profile_id.
-        KRYTYCZNE: Używa default_profile_id, który MUSI być ustawiony na realny ID!
-        """
-        profile_id = self.default_profile_id
-        
-        if profile_id == 0:
-            self.logger.warning(
-                "⚠️ UWAGA: Próba ustawienia tokenu dla profile_id=0! "
-                "To oznacza, że config_data['profile_id'] nie jest poprawnie przekazywane. "
-                "Token zostanie zapisany dla profile_id=0, co może powodować kolizje."
-            )
-        
-        if not token:
-            with self._tokens_lock:
-                self._tokens_by_profile.pop(profile_id, None)
-            return
-
-        username, password = self._get_credentials_for_profile(profile_id)
-        # Fallback jeśli nie mamy zapisanych credentials dla profilu
-        if not username:
-             username = self.default_username
-        if not password:
-             password = self.default_password
-
-        if not username or not password:
-            self.logger.warning(
-                f"Ustawiono current_token bez pełnych credentials (profile_id={profile_id}). "
-                "Automatyczne odświeżanie może nie zadziałać."
-            )
-            # Mimo braku creds, zapisujemy token, żeby "działało" doraźnie
-            username = username or "unknown"
-            password = password or "unknown"
-
-        self._set_token_entry(profile_id, token, username, password)
-
-    @property
-    def token_set_time(self) -> Optional[datetime]:
-        """Wsteczna kompatybilność: czas ustawienia tokenu dla default_profile_id."""
-        entry = self._get_token_entry(self.default_profile_id)
-        return entry.get("issued_at") if entry else None
+    def _validate_profile_id(self, profile_id: Optional[int]) -> int:
+        """Zwraca zweryfikowane profile_id lub rzuca wyjątek."""
+        pid = profile_id if profile_id is not None else self.default_profile_id
+        if not pid or int(pid) == 0:
+            self.logger.error("❌ CRITICAL: Attempted to use profile_id=0 or None")
+            raise ValueError("Invalid profile_id (0). Profile ID is required.")
+        return int(pid)
 
     # -----------------------------
     # Token helpers
@@ -135,15 +90,42 @@ class MedicoverClient:
         with self._tokens_lock:
             return self._tokens_by_profile.get(int(profile_id))
 
+    def get_token_entry(self, profile_id: int) -> Optional[Dict[str, Any]]:
+        """Publiczny dostęp do metadanych tokenu (dla cache w MedicoverApp)."""
+        pid = self._validate_profile_id(profile_id)
+        return self._get_token_entry(pid)
+
+    def restore_session(self, profile_id: int, token: str, issued_at: datetime, expires_at: datetime, username: str = None):
+        """Przywraca sesję z cache zachowując oryginalne timestampy."""
+        pid = self._validate_profile_id(profile_id)
+        u = username or self.default_username or "restored"
+        p = self.default_password or "restored"
+        
+        with self._tokens_lock:
+             self._tokens_by_profile[pid] = {
+                "token": token,
+                "username": u,
+                "password": p,
+                "issued_at": issued_at,
+                "last_refresh_at": issued_at, # Approximate
+                "expires_at": expires_at,
+                "token_hash_prefix": self._token_hash_prefix(token),
+            }
+        self.logger.info(f"♻️ Restored session profile_id={pid} expires_at={expires_at.strftime('%H:%M:%S')}")
+
     def _get_credentials_for_profile(self, profile_id: int) -> Tuple[Optional[str], Optional[str]]:
         entry = self._get_token_entry(profile_id)
         if entry and entry.get("username") and entry.get("password"):
             return entry.get("username"), entry.get("password")
         return self.default_username, self.default_password
 
-    def _set_token_entry(self, profile_id: int, token: str, username: str, password: str) -> None:
+    def _set_token_entry(self, profile_id: int, token: str, username: str, password: str, 
+                         issued_at: datetime = None, expires_at: datetime = None) -> None:
         now = datetime.now()
-        expires_at = now + timedelta(seconds=self.TOKEN_TTL_SECONDS)
+        # Jeśli nie podano czasów, to znaczy że to NOWY token (resetujemy zegar)
+        final_issued_at = issued_at if issued_at else now
+        final_expires_at = expires_at if expires_at else (now + timedelta(seconds=self.TOKEN_TTL_SECONDS))
+        
         token_hash_prefix = self._token_hash_prefix(token)
 
         with self._tokens_lock:
@@ -151,15 +133,15 @@ class MedicoverClient:
                 "token": token,
                 "username": username,
                 "password": password,
-                "issued_at": now,
+                "issued_at": final_issued_at,
                 "last_refresh_at": now,
-                "expires_at": expires_at,
+                "expires_at": final_expires_at,
                 "token_hash_prefix": token_hash_prefix,
             }
 
         self.logger.info(
             f"Token updated profile_id={profile_id} token_hash_prefix={token_hash_prefix} "
-            f"expires_at={expires_at.isoformat()}"
+            f"expires_at={final_expires_at.isoformat()}"
         )
 
     def _clear_token_entry(self, profile_id: int) -> None:
@@ -178,38 +160,38 @@ class MedicoverClient:
     def _ensure_valid_token(self, profile_id: int, reason: str) -> str:
         """
         Zwraca ważny token dla profilu; w razie potrzeby odświeża (tylko dla tego profilu).
-        KRYTYCZNE: NIE odświeża tokenu co minutę, tylko gdy naprawdę blisko expiry!
         """
-        profile_id = int(profile_id)
-        entry = self._get_token_entry(profile_id)
+        # Validate profile ID first
+        pid = self._validate_profile_id(profile_id)
+        
+        entry = self._get_token_entry(pid)
 
         if not entry:
-            self.logger.info(f"relogin profile_id={profile_id} reason=missing age_s=0")
-            if not self._perform_relogin(profile_id):
-                raise LoginRequiredException(f"Brak sesji dla profilu {profile_id}.")
-            entry = self._get_token_entry(profile_id)
+            self.logger.info(f"relogin profile_id={pid} reason=missing age_s=0")
+            if not self._perform_relogin(pid):
+                raise LoginRequiredException(f"Brak sesji dla profilu {pid}.")
+            entry = self._get_token_entry(pid)
             if not entry:
-                raise LoginRequiredException(f"Brak tokenu po relogin (profil {profile_id}).")
+                raise LoginRequiredException(f"Brak tokenu po relogin (profil {pid}).")
 
         age_s = int((datetime.now() - entry["issued_at"]).total_seconds())
         expires_in_s = int((entry["expires_at"] - datetime.now()).total_seconds())
 
         # ZMIANA: Refresh TYLKO gdy zostało mniej niż REFRESH_BUFFER_SECONDS (30s)
-        # Nie odświeżamy tokenu z expires_in_s=400+ "dla pewności"
         if expires_in_s <= self.REFRESH_BUFFER_SECONDS:
             self.logger.info(
-                f"relogin profile_id={profile_id} reason=expires_soon({reason}) age_s={age_s} expires_in_s={expires_in_s}"
+                f"relogin profile_id={pid} reason=expires_soon({reason}) age_s={age_s} expires_in_s={expires_in_s}"
             )
-            if not self._perform_relogin(profile_id):
+            if not self._perform_relogin(pid):
                 raise LoginRequiredException(
-                    f"Nie udało się odświeżyć sesji dla profilu {profile_id}."
+                    f"Nie udało się odświeżyć sesji dla profilu {pid}."
                 )
-            entry = self._get_token_entry(profile_id)
+            entry = self._get_token_entry(pid)
             if not entry:
-                raise LoginRequiredException(f"Brak tokenu po refresh (profil {profile_id}).")
+                raise LoginRequiredException(f"Brak tokenu po refresh (profil {pid}).")
 
         # Log per request (wymaganie)
-        self._log_token_usage(profile_id, entry)
+        self._log_token_usage(pid, entry)
         return entry["token"]
 
     # -----------------------------
@@ -218,8 +200,7 @@ class MedicoverClient:
 
     def login(self, username: str, password: str, profile_id: Optional[int] = None) -> bool:
         """Loguje użytkownika i zapisuje token dla danego profilu."""
-        if profile_id is None:
-            profile_id = self.default_profile_id
+        pid = self._validate_profile_id(profile_id)
 
         progress_callback = self.config_data.get("progress_callback")
         try:
@@ -230,45 +211,46 @@ class MedicoverClient:
 
             masked_user = self._mask_text(username)
             self.logger.info(
-                f"Rozpoczynanie logowania dla profilu {profile_id} (użytkownik {masked_user})..."
+                f"Rozpoczynanie logowania dla profilu {pid} (użytkownik {masked_user})..."
             )
 
             token = self.authenticator.login(username, password)
             if not token:
-                self.logger.error(f"Logowanie nieudane dla profilu {profile_id}.")
+                self.logger.error(f"Logowanie nieudane dla profilu {pid}.")
                 return False
 
-            self._set_token_entry(profile_id, token, username, password)
-            self.logger.info(f"Logowanie zakończone sukcesem dla profilu {profile_id}.")
+            self._set_token_entry(pid, token, username, password)
+            self.logger.info(f"Logowanie zakończone sukcesem dla profilu {pid}.")
             return True
         except Exception as e:
             self.logger.error(
-                f"Krytyczny błąd logowania (profil {profile_id}): {e}", exc_info=True
+                f"Krytyczny błąd logowania (profil {pid}): {e}", exc_info=True
             )
             return False
 
     def is_logged_in(self, profile_id: Optional[int] = None) -> bool:
         """Sprawdza ważność tokenu dla konkretnego profilu."""
-        if profile_id is None:
-            profile_id = self.default_profile_id
+        try:
+            pid = self._validate_profile_id(profile_id)
+        except ValueError:
+            return False
 
-        entry = self._get_token_entry(profile_id)
+        entry = self._get_token_entry(pid)
         if not entry:
             return False
 
         if datetime.now() > entry["expires_at"]:
-            self.logger.info(f"Token dla profilu {profile_id} wygasł (expires_at).")
-            self._clear_token_entry(profile_id)
+            self.logger.info(f"Token dla profilu {pid} wygasł (expires_at).")
+            self._clear_token_entry(pid)
             return False
 
         return True
 
     def get_token(self, profile_id: Optional[int] = None) -> Optional[str]:
         """Zwraca token dla profilu (bez wymuszania refresh)."""
-        if profile_id is None:
-            profile_id = self.default_profile_id
+        pid = self._validate_profile_id(profile_id)
 
-        entry = self._get_token_entry(profile_id)
+        entry = self._get_token_entry(pid)
         if not entry:
             return None
 
@@ -277,7 +259,7 @@ class MedicoverClient:
         token_hash_prefix = entry.get("token_hash_prefix") or "unknown"
 
         self.logger.info(
-            f"Using token profile_id={profile_id} token_age_s={age_s} expires_in_s={expires_in_s} "
+            f"Using token profile_id={pid} token_age_s={age_s} expires_in_s={expires_in_s} "
             f"token_hash_prefix={token_hash_prefix}"
         )
         return entry["token"]
@@ -291,7 +273,9 @@ class MedicoverClient:
                 final_params.pop("specialty_ids", None)
             final_params.update(search_params)
 
-        profile_id = int(final_params.get("profile_id", self.default_profile_id))
+        # Force validation
+        profile_id_raw = final_params.get("profile_id", self.default_profile_id)
+        profile_id = self._validate_profile_id(int(profile_id_raw) if profile_id_raw else None)
 
         max_retries = 1
         for attempt in range(max_retries + 1):
@@ -331,8 +315,7 @@ class MedicoverClient:
         return []
 
     def book_appointment(self, appointment: Dict[str, Any], profile_id: Optional[int] = None) -> Dict[str, Any]:
-        if profile_id is None:
-            profile_id = self.default_profile_id
+        pid = self._validate_profile_id(profile_id)
 
         booking_string = appointment.get("bookingString")
         if not booking_string:
@@ -345,21 +328,21 @@ class MedicoverClient:
         max_retries = 1
         for attempt in range(max_retries + 1):
             try:
-                token = self._ensure_valid_token(profile_id, reason="book")
+                token = self._ensure_valid_token(pid, reason="book")
                 return self.api.book_appointment(booking_string, token)
 
             except AuthenticationException:
-                entry = self._get_token_entry(profile_id)
+                entry = self._get_token_entry(pid)
                 age_s = (
                     int((datetime.now() - entry["issued_at"]).total_seconds()) if entry else 0
                 )
                 self.logger.info(
-                    f"relogin profile_id={profile_id} reason=401 age_s={age_s}"
+                    f"relogin profile_id={pid} reason=401 age_s={age_s}"
                 )
-                self._clear_token_entry(profile_id)
+                self._clear_token_entry(pid)
 
                 if attempt < max_retries:
-                    if self._perform_relogin(profile_id):
+                    if self._perform_relogin(pid):
                         continue
                 return {
                     "success": False,
@@ -375,15 +358,14 @@ class MedicoverClient:
 
     def _perform_relogin(self, profile_id: Optional[int] = None) -> bool:
         """Loguje ponownie konkretny profil używając zapisanych credentials."""
-        if profile_id is None:
-            profile_id = self.default_profile_id
+        pid = self._validate_profile_id(profile_id)
 
-        username, password = self._get_credentials_for_profile(profile_id)
+        username, password = self._get_credentials_for_profile(pid)
         if not username or not password:
-            self.logger.error(f"Brak danych logowania dla profilu {profile_id}.")
+            self.logger.error(f"Brak danych logowania dla profilu {pid}.")
             return False
 
-        return self.login(username, password, profile_id)
+        return self.login(username, password, profile_id=pid)
 
     def close(self) -> None:
         self.authenticator.close()
@@ -391,24 +373,18 @@ class MedicoverClient:
     def format_appointment_details(self, appointment: Dict[str, Any]) -> str:
         return self.formatter.format_details(appointment)
 
-    def get_session_info(self) -> Dict[str, Any]:
-        profiles_info = []
-        with self._tokens_lock:
-            for pid, data in self._tokens_by_profile.items():
-                age = int((datetime.now() - data["issued_at"]).total_seconds())
-                expires = int((data["expires_at"] - datetime.now()).total_seconds())
-                profiles_info.append(
-                    {
-                        "profile_id": pid,
-                        "age_seconds": age,
-                        "expires_in_seconds": expires,
-                        "token_hash_prefix": data.get("token_hash_prefix"),
-                    }
-                )
+    # Legacy/Backwards Compat - REMOVED or MODIFIED to prevent bad usage
+    @property
+    def current_token(self) -> Optional[str]:
+        return self.get_token(self.default_profile_id) if self.default_profile_id != 0 else None
 
-        return {
-            "default_profile_id": self.default_profile_id,
-            "active_profiles_count": len(profiles_info),
-            "profiles": profiles_info,
-            "api_stateless": True,
-        }
+    @current_token.setter
+    def current_token(self, token: Optional[str]) -> None:
+        """
+        DEPRECATED: Setting token via current_token resets timestamps!
+        Use restore_session for context preservation.
+        """
+        if self.default_profile_id == 0:
+            return # Ignore or log error
+        # Assuming restore with new timestamps (reset) if called directly
+        self._set_token_entry(self.default_profile_id, token, self.default_username, self.default_password)
