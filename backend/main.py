@@ -27,7 +27,7 @@ sys.path.insert(0, str(ROOT_DIR))
 
 # Konfiguracja logowania z DEBUG i force flush dla Railway
 logging.basicConfig(
-    level=logging.DEBUG,
+    level=logging.INFO,
     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
     handlers=[
         logging.StreamHandler(sys.stdout)
@@ -39,7 +39,7 @@ sys.stderr.reconfigure(line_buffering=True)
 
 logger = logging.getLogger(__name__)
 logger.info("=" * 80)
-logger.info("🚀 MEDIFINDER START - LOG LEVEL: DEBUG")
+logger.info("🚀 MEDIFINDER START - LOG LEVEL: INFO")
 logger.info("=" * 80)
 
 # --- SEEDING LOGIC ---
