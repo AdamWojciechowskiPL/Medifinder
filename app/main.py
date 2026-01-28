@@ -55,6 +55,12 @@ class MedicoverApp:
         # API nie przedłuża jego ważności. Czas jest liczony od momentu zalogowania przez Selenium.
         self.TOKEN_VALIDITY_SECONDS = 510  # 8 min 30 sek
         
+    def _mask_text(self, text: str, visible_chars: int = 3) -> str:
+        """Maskuje tekst (np. email lub login) zostawiając ostatnie znaki."""
+        if not text: return "None"
+        if len(text) <= visible_chars: return "***"
+        return "***" + text[-visible_chars:]
+
     def _get_user_lock(self, user_email: str) -> threading.Lock:
         """Zwraca (tworząc w razie potrzeby) blokadę dla danego użytkownika."""
         with self._user_locks_lock:
@@ -166,22 +172,18 @@ class MedicoverApp:
                     global_end_time = time(int(parts[0]), int(parts[1]))
             except Exception: pass
 
-        self.logger.info(f"START Filtrowanie pref: wejście={len(appointments)}, Excluded={excluded_dates}, PrefDays={preferred_days}")
+        self.logger.debug(f"START Filtrowanie pref: wejście={len(appointments)}")
 
         for apt in appointments:
             dt = self._parse_appointment_date_dt(apt)
             if not dt:
-                self.logger.info("Odrzucono wizytę: Brak daty (dt is None)")
                 filtered.append(apt) # Fail-open
                 continue
-
-            self.logger.info(f"Przetwarzanie wizyty: {dt} (Dzień tyg: {dt.weekday()})")
 
             # 0. Sprawdź wykluczone daty (blacklist)
             if excluded_dates:
                 apt_date = dt.date()
                 if apt_date in excluded_dates:
-                    self.logger.info(f"-> Odrzucono (Excluded Date): {apt_date}")
                     continue
 
             # 1. Sprawdź dzień tygodnia (0=Pon, 6=Nd)
@@ -189,7 +191,6 @@ class MedicoverApp:
             
             # Jeśli user zaznaczył "dni tygodnia" w checkboxach, sprawdź to
             if preferred_days and weekday not in preferred_days:
-                self.logger.info(f"-> Odrzucono (Weekday): {weekday} not in {preferred_days}")
                 continue
 
             # 2. Sprawdź godziny
@@ -206,7 +207,6 @@ class MedicoverApp:
                     e_time = time(int(e_parts[0]), int(e_parts[1]))
 
                     if not self._is_time_in_range(t, s_time, e_time):
-                        self.logger.info(f"-> Odrzucono (Specific Time): {t} outside {s_time}-{e_time}")
                         continue # Poza zakresem specyficznym dla dnia
                     
                     specific_range_found = True
@@ -217,27 +217,20 @@ class MedicoverApp:
             if not specific_range_found:
                 if global_start_time and global_end_time:
                     if not self._is_time_in_range(t, global_start_time, global_end_time):
-                        self.logger.info(f"-> Odrzucono (Global Time): {t} outside {global_start_time}-{global_end_time}")
                         continue
                 else:
                     if global_start_time and t < global_start_time:
-                        self.logger.info(f"-> Odrzucono (Global Start): {t} < {global_start_time}")
                         continue
                     if global_end_time and t > global_end_time:
-                        self.logger.info(f"-> Odrzucono (Global End): {t} > {global_end_time}")
                         continue
 
-            self.logger.info(f"-> ZAAKCEPTOWANO: {dt}")
             filtered.append(apt)
 
-        self.logger.info(f"KONIEC Filtrowanie pref: wyjście={len(filtered)}")
         return filtered
 
     def _filter_results_by_date_range(self, appointments: List[Dict[str, Any]], start_date: Optional[str], end_date: Optional[str]) -> List[Dict[str, Any]]:
         if not appointments:
             return appointments
-
-        self.logger.info(f"START Filtrowanie zakresu dat: wejście={len(appointments)}, Start={start_date}, End={end_date}")
 
         start = None
         end = None
@@ -246,12 +239,9 @@ class MedicoverApp:
             if not d_str:
                 return None
             try:
-                # Try parsing as date YYYY-MM-DD
                 return date.fromisoformat(d_str)
             except ValueError:
                 try:
-                    # Try parsing as datetime (e.g. ISO from JS with time)
-                    # Handle Z suffix manually if needed
                     s = d_str.replace('Z', '+00:00')
                     return datetime.fromisoformat(s).date()
                 except Exception:
@@ -259,13 +249,9 @@ class MedicoverApp:
 
         if start_date:
             start = parse_date_input(start_date)
-            if not start:
-                self.logger.warning(f"Nieprawidłowy start_date: {start_date}")
 
         if end_date:
             end = parse_date_input(end_date)
-            if not end:
-                self.logger.warning(f"Nieprawidłowy end_date: {end_date}")
 
         if not start and not end:
             return appointments
@@ -279,14 +265,11 @@ class MedicoverApp:
             
             d = dt.date()
             if start and d < start:
-                # self.logger.info(f"-> Odrzucono (Too Early): {d} < {start}")
                 continue
             if end and d > end:
-                # self.logger.info(f"-> Odrzucono (Too Late): {d} > {end}")
                 continue
             filtered.append(apt)
 
-        self.logger.info(f"KONIEC Filtrowanie zakresu dat: wyjście={len(filtered)}")
         return filtered
         
     def _update_data_from_appointments(self, appointments: List[Dict[str, Any]]) -> None:
@@ -348,12 +331,11 @@ class MedicoverApp:
                     # TOKEN JEST JESZCZE WAŻNY
                     # Nie aktualizujemy expires_at (brak sliding window)
                     self._session_cache[key]['last_used'] = now
-                    # Opcjonalnie logowanie debugowe, by nie śmiecić przy każdym odczycie
-                    # self.logger.debug(f"♻️ Użycie tokenu z cache dla {key}")
+                    # self.logger.debug(f"♻️ Użycie tokenu z cache dla {self._mask_text(key)}")
                     return data['token']
                 else:
                     # Token wygasł - usuń z cache
-                    self.logger.info(f"⏰ Token cache dla {key} wygasł (upłynęło > {self.TOKEN_VALIDITY_SECONDS}s). Usuwam z cache.")
+                    self.logger.info(f"⏰ Token cache dla {self._mask_text(key)} wygasł (upłynęło > {self.TOKEN_VALIDITY_SECONDS}s). Usuwam z cache.")
                     del self._session_cache[key]
         return None
 
@@ -367,7 +349,7 @@ class MedicoverApp:
                 'expires_at': now + timedelta(seconds=self.TOKEN_VALIDITY_SECONDS),
                 'last_used': now
             }
-            self.logger.info(f"💾 Token cache dla {key} zapisany. Wygasa: {self._session_cache[key]['expires_at'].strftime('%H:%M:%S')}")
+            self.logger.info(f"💾 Token cache dla {self._mask_text(key)} zapisany. Wygasa: {self._session_cache[key]['expires_at'].strftime('%H:%M:%S')}")
 
     def _refresh_token_ttl(self, user_email: str, username: str):
         """
@@ -387,6 +369,9 @@ class MedicoverApp:
         # Zapobiega równoległym logowaniom, które unieważniają nawzajem tokeny
         user_lock = self._get_user_lock(user_email)
         
+        # Inicjalizacja profile_id, które będzie użyte poza blokadą
+        p_id = 0
+
         # Używamy blokady tylko na czas sprawdzenia/uzyskania sesji, a nie całego requestu
         with user_lock:
             credentials = self.profile_manager.get_credentials(user_email, profile)
@@ -397,6 +382,15 @@ class MedicoverApp:
             client_config['username'] = username
             client_config['password'] = password
             
+            # FIX: Set profile_id from username to ensure isolation and correct logging
+            # Loginy Medicover są zazwyczaj numeryczne (Member ID)
+            try:
+                p_id = int(username)
+                client_config['profile_id'] = p_id
+            except ValueError:
+                p_id = 0
+                client_config['profile_id'] = 0
+            
             try:
                 temp_client = MedicoverClient(client_config)
                 
@@ -406,13 +400,13 @@ class MedicoverApp:
                 is_logged_in = False
 
                 if cached_token:
-                    # FIX: Bezpośrednie użycie setter-a current_token zamiast wywołania usuniętej metody api.set_bearer_token
+                    # FIX: Bezpośrednie użycie setter-a current_token
                     temp_client.current_token = cached_token
                     is_logged_in = True
                 
                 if not is_logged_in:
-                    self.logger.info(f"🔌 Logowanie przez Selenium dla {user_email} (Login: {username})...")
-                    if temp_client.login(username, password):
+                    self.logger.info(f"🔌 Logowanie przez Selenium dla {self._mask_text(user_email)} (Login: {self._mask_text(username)})...")
+                    if temp_client.login(username, password, profile_id=p_id):
                         self._cache_session(user_email, username, temp_client.current_token)
                         is_logged_in = True
                     else:
@@ -426,6 +420,8 @@ class MedicoverApp:
         if kwargs.get('specialty_ids'): search_params['SpecialtyIds'] = kwargs['specialty_ids']
         if kwargs.get('doctor_ids'): search_params['DoctorIds'] = kwargs['doctor_ids']
         if kwargs.get('clinic_ids'): search_params['ClinicIds'] = kwargs['clinic_ids']
+        if p_id: search_params['profile_id'] = p_id # Przekazujemy ID profilu!
+        
         start_date = kwargs.get('start_date')
         end_date = kwargs.get('end_date')
         if start_date: search_params['StartTime'] = start_date
@@ -437,7 +433,7 @@ class MedicoverApp:
             # --- FIX START: Aktualizacja cache jeśli klient zmienił token ---
             # Jeśli MedicoverClient wykonał re-login w tle, musimy zapisać nowy token do cache
             if temp_client.current_token and temp_client.current_token != cached_token:
-                self.logger.info(f"🔄 Token zmieniony przez klienta (Internal Relogin). Aktualizacja cache dla {user_email}_{username}.")
+                self.logger.info(f"🔄 Token zmieniony przez klienta (Internal Relogin). Aktualizacja cache dla {self._mask_text(username)}.")
                 self._cache_session(user_email, username, temp_client.current_token)
             else:
                 # Sukces na starym tokenie - aktualizacja stats, bez przedłużania TTL
@@ -445,7 +441,7 @@ class MedicoverApp:
             # --- FIX END ---
 
         except AuthenticationException:
-            self.logger.warning(f"⚠️ Token cache wygasł dla {user_email}_{username} (API 401). Próba relogowania (z blokadą)...")
+            self.logger.warning(f"⚠️ Token cache wygasł dla {self._mask_text(username)} (API 401). Próba relogowania (z blokadą)...")
             
             # Jeśli token wygasł, musimy ponownie wejść w sekcję krytyczną i przelogować
             with user_lock:
@@ -465,7 +461,7 @@ class MedicoverApp:
                     with self._session_lock:
                          if key in self._session_cache: del self._session_cache[key]
 
-                    if temp_client.login(username, password):
+                    if temp_client.login(username, password, profile_id=p_id):
                         self._cache_session(user_email, username, temp_client.current_token)
                         found = temp_client.search_appointments(search_params)
                     else:
@@ -499,6 +495,8 @@ class MedicoverApp:
         if not user_email or not profile: return {"success": False, "message": "Brak danych profilu"}
         
         user_lock = self._get_user_lock(user_email)
+        p_id = 0
+
         with user_lock:
             credentials = self.profile_manager.get_credentials(user_email, profile)
             if not credentials: return {"success": False, "message": "Błąd poświadczeń"}
@@ -508,6 +506,13 @@ class MedicoverApp:
             client_config['username'] = username
             client_config['password'] = password
             
+            try:
+                p_id = int(username)
+                client_config['profile_id'] = p_id
+            except ValueError:
+                p_id = 0
+                client_config['profile_id'] = 0
+
             try:
                 temp_client = MedicoverClient(client_config)
                 
@@ -522,8 +527,8 @@ class MedicoverApp:
                     is_logged_in = True
                 
                 if not is_logged_in:
-                    self.logger.info(f"🔌 (Book) Logowanie przez Selenium dla {user_email} (Login: {username})...")
-                    if temp_client.login(username, password):
+                    self.logger.info(f"🔌 (Book) Logowanie przez Selenium dla {self._mask_text(user_email)} (Login: {self._mask_text(username)})...")
+                    if temp_client.login(username, password, profile_id=p_id):
                         self._cache_session(user_email, username, temp_client.current_token)
                         is_logged_in = True
                     else:
@@ -537,7 +542,7 @@ class MedicoverApp:
         if not appointment_obj.get("bookingString"): return {"success": False, "message": "Brak bookingString"}
 
         try:
-            result = temp_client.book_appointment(appointment_obj)
+            result = temp_client.book_appointment(appointment_obj, profile_id=p_id)
             return result
         except AuthenticationException:
             # Retry logic z blokadą...
@@ -547,12 +552,12 @@ class MedicoverApp:
                  if cached_token_now and cached_token_now != temp_client.current_token:
                       # FIX: Bezpośrednie przypisanie zamiast set_bearer_token
                       temp_client.current_token = cached_token_now
-                      return temp_client.book_appointment(appointment_obj)
+                      return temp_client.book_appointment(appointment_obj, profile_id=p_id)
 
-                 self.logger.warning(f"⚠️ (Book) Token cache wygasł dla {user_email}_{username}. Ponawiam logowanie...")
-                 if temp_client.login(username, password):
+                 self.logger.warning(f"⚠️ (Book) Token cache wygasł dla {self._mask_text(username)}. Ponawiam logowanie...")
+                 if temp_client.login(username, password, profile_id=p_id):
                     self._cache_session(user_email, username, temp_client.current_token)
-                    return temp_client.book_appointment(appointment_obj)
+                    return temp_client.book_appointment(appointment_obj, profile_id=p_id)
                  else:
                     return {"success": False, "message": "Błąd odświeżania sesji przy rezerwacji"}
 
