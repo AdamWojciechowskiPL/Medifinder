@@ -326,14 +326,14 @@ class MedicoverApp:
                 data = self._session_cache[key]
                 now = datetime.now()
                 
-                # Sprawdź czy token nie wygasł
+                # Sprawdź czy token nie wygasł - źródłem prawdy jest expires_at
                 if now < data['expires_at']:
                     # TOKEN JEST JESZCZE WAŻNY
-                    self._session_cache[key]['last_used'] = now
+                    # Nie aktualizujemy last_used, aby nie 'odmładzać' sesji (brak touch)
                     return data
                 else:
                     # Token wygasł - usuń z cache
-                    self.logger.info(f"⏰ Token cache dla {self._mask_text(key)} wygasł (upłynęło > {self.TOKEN_VALIDITY_SECONDS}s). Usuwam z cache.")
+                    self.logger.info(f"⏰ Token cache dla {self._mask_text(key)} wygasł (expires_at={data['expires_at'].strftime('%H:%M:%S')}). Usuwam z cache.")
                     del self._session_cache[key]
         return None
 
@@ -351,9 +351,7 @@ class MedicoverApp:
             # Sprawdź czy token się zmienił przed logowaniem
             old_entry = self._session_cache.get(key)
             if old_entry and old_entry['token'] == token:
-                # Token jest ten sam - nie aktualizuj expire time, tylko last_used?
-                # Ale jeśli explicit expires_at jest podane, to może warto?
-                # Zgodnie z wymaganiem: cache zapisuj TYLKO gdy token się zmienił
+                # Token jest ten sam - nic nie rób
                 return
 
             self._session_cache[key] = {
@@ -362,18 +360,15 @@ class MedicoverApp:
                 'issued_at': final_issued_at,
                 'last_used': now
             }
+            # Logujemy dokładną datę wygaśnięcia, aby ułatwić debugowanie
             self.logger.info(f"💾 Token cache dla {self._mask_text(key)} zapisany. Wygasa: {final_expires_at.strftime('%H:%M:%S')}")
 
     def _refresh_token_ttl(self, user_email: str, username: str):
         """
-        Aktualizuje statystykę last_used, ale NIE przedłuża ważności tokena (expires_at).
+        DEPRECATED: Aktualizacja last_used usunięta, aby nie przesuwać czasu życia.
+        Zostawione jako pusta metoda dla kompatybilności wstecznej (jeśli ktoś używa).
         """
-        key = self._get_cache_key(user_email, username)
-        with self._session_lock:
-            if key in self._session_cache:
-                now = datetime.now()
-                # UWAGA: Usunięto przedłużanie czasu życia
-                self._session_cache[key]['last_used'] = now
+        pass
 
     def search_appointments(self, user_email: str = None, profile: str = None, **kwargs) -> List[Dict[str, Any]]:
         if not user_email or not profile: return []
@@ -471,8 +466,7 @@ class MedicoverApp:
                         entry['issued_at'], 
                         entry['expires_at']
                     )
-            else:
-                self._refresh_token_ttl(user_email, username)
+            # USUNIĘTO: else self._refresh_token_ttl(...) - brak touchowania
             # --- FIX END ---
 
         except AuthenticationException:
@@ -516,12 +510,6 @@ class MedicoverApp:
                     else:
                         self.logger.error("❌ Ponowne logowanie nieudane.")
                         return []
-            
-            # Retry search logic needs to be cleaner, but for now assuming recursion or just one retry inside search_appointments (client handles retries internally mostly, but 401 raises AuthException)
-            # Actually client.search_appointments has retry loop for 401. 
-            # If we are here, it means client exhausted retries or failed. 
-            # So we probably shouldn't retry again unless we want to handle it externally. 
-            # But wait, client raises AuthException ONLY if internal retry fails.
             pass
 
         if not found: return []
