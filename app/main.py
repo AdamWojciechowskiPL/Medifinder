@@ -51,8 +51,9 @@ class MedicoverApp:
         self._user_locks: Dict[str, threading.Lock] = {}
         self._user_locks_lock = threading.Lock() # Do ochrony słownika blokad
         
-        # ZMIANA: Przywracamy dłuższy TTL (np. 14 minut, standard to ok. 15-20 min idle)
-        self.TOKEN_TTL_MINUTES = 14
+        # ZMIANA: Token Medicover jest ważny sztywno 8m 30s od pobrania.
+        # API nie przedłuża jego ważności. Czas jest liczony od momentu zalogowania przez Selenium.
+        self.TOKEN_VALIDITY_SECONDS = 510  # 8 min 30 sek
         
     def _get_user_lock(self, user_email: str) -> threading.Lock:
         """Zwraca (tworząc w razie potrzeby) blokadę dla danego użytkownika."""
@@ -334,6 +335,7 @@ class MedicoverApp:
     def _get_cached_session(self, user_email: str, username: str) -> Optional[str]:
         """
         Pobiera aktywny token z cache dla użytkownika i loginu Medicover.
+        UWAGA: Nie przedłużamy TTL przy odczycie, token ma stały czas życia!
         """
         key = self._get_cache_key(user_email, username)
         with self._session_lock:
@@ -343,14 +345,15 @@ class MedicoverApp:
                 
                 # Sprawdź czy token nie wygasł
                 if now < data['expires_at']:
-                    # TOKEN JEST JESZCZE WAŻNY - Przedłużamy TTL (sliding window)
-                    self._session_cache[key]['expires_at'] = now + timedelta(minutes=self.TOKEN_TTL_MINUTES)
+                    # TOKEN JEST JESZCZE WAŻNY
+                    # Nie aktualizujemy expires_at (brak sliding window)
                     self._session_cache[key]['last_used'] = now
-                    self.logger.info(f"♻️ Użycie tokenu z cache dla {key} (przedłużono do {self._session_cache[key]['expires_at'].strftime('%H:%M:%S')})")
+                    # Opcjonalnie logowanie debugowe, by nie śmiecić przy każdym odczycie
+                    # self.logger.debug(f"♻️ Użycie tokenu z cache dla {key}")
                     return data['token']
                 else:
                     # Token wygasł - usuń z cache
-                    self.logger.info(f"⏰ Token cache dla {key} wygasł. Usuwam z cache.")
+                    self.logger.info(f"⏰ Token cache dla {key} wygasł (upłynęło > {self.TOKEN_VALIDITY_SECONDS}s). Usuwam z cache.")
                     del self._session_cache[key]
         return None
 
@@ -361,20 +364,20 @@ class MedicoverApp:
         with self._session_lock:
             self._session_cache[key] = {
                 'token': token,
-                'expires_at': now + timedelta(minutes=self.TOKEN_TTL_MINUTES),
+                'expires_at': now + timedelta(seconds=self.TOKEN_VALIDITY_SECONDS),
                 'last_used': now
             }
             self.logger.info(f"💾 Token cache dla {key} zapisany. Wygasa: {self._session_cache[key]['expires_at'].strftime('%H:%M:%S')}")
 
     def _refresh_token_ttl(self, user_email: str, username: str):
         """
-        Przedłuża TTL tokenu po udanym użyciu API.
+        Aktualizuje statystykę last_used, ale NIE przedłuża ważności tokena (expires_at).
         """
         key = self._get_cache_key(user_email, username)
         with self._session_lock:
             if key in self._session_cache:
                 now = datetime.now()
-                self._session_cache[key]['expires_at'] = now + timedelta(minutes=self.TOKEN_TTL_MINUTES)
+                # UWAGA: Usunięto przedłużanie czasu życia
                 self._session_cache[key]['last_used'] = now
 
     def search_appointments(self, user_email: str = None, profile: str = None, **kwargs) -> List[Dict[str, Any]]:
@@ -437,7 +440,7 @@ class MedicoverApp:
                 self.logger.info(f"🔄 Token zmieniony przez klienta (Internal Relogin). Aktualizacja cache dla {user_email}_{username}.")
                 self._cache_session(user_email, username, temp_client.current_token)
             else:
-                # Sukces na starym tokenie - tylko odświeżamy TTL
+                # Sukces na starym tokenie - aktualizacja stats, bez przedłużania TTL
                 self._refresh_token_ttl(user_email, username)
             # --- FIX END ---
 
