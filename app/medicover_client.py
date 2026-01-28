@@ -2,13 +2,14 @@
 Zrefaktoryzowany MedicoverClient - klasa pełniąca rolę "dyrygenta" (orchestratora),
 która zarządza stanem sesji i koordynuje pracę wyspecjalizowanych komponentów.
 
-WERSJA: Obsługa tokenów per profil (izolacja stanu) + kompatybilność wsteczna.
+WERSJA: Ścisła izolacja tokenów per profil + atomowe aktualizacje.
 
 Wymagania:
-- token w pamięci procesu per profil
+- token w pamięci procesu per profil (NIGDY profile_id=0 dla requestów)
 - deterministyczny TTL ~8.5 min
 - logi per request: profile_id, token_age_s, expires_in_s, token_hash_prefix
 - relogin tylko dla profilu, którego dotyczy
+- refresh TYLKO przy zbliżaniu się do expiry (nie co minutę!)
 """
 
 import logging
@@ -35,8 +36,9 @@ class MedicoverClient:
     # Deterministyczny czas życia tokenu (z logów ~510s ≈ 8m30s)
     TOKEN_TTL_SECONDS = 510
 
-    # Odświeżamy zanim dobijemy do expiry, żeby uniknąć 401
-    REFRESH_BUFFER_SECONDS = 75
+    # Odświeżamy TYLKO gdy zostało mniej niż 30s do expiry
+    # ZMIANA: Zwiększono bufor z 75s na realny próg blisko expiry
+    REFRESH_BUFFER_SECONDS = 30
 
     def __init__(self, config_data: Dict[str, Any]):
         self.logger = logging.getLogger(self.__class__.__name__)
@@ -47,7 +49,8 @@ class MedicoverClient:
         self.api = MedicoverAPI()
         self.formatter = AppointmentFormatter()
 
-        # Domyślny profil dla kompatybilności (gdy reszta aplikacji nie przekazuje profile_id)
+        # KRYTYCZNE: default_profile_id MUSI być ustawione na realny ID z config
+        # Nie może być 0, chyba że rzeczywiście w config jest 0
         self.default_profile_id: int = int(config_data.get("profile_id", 0) or 0)
 
         # --- Zarządzanie stanem sesji PER PROFIL ---
@@ -59,11 +62,14 @@ class MedicoverClient:
         self.default_username: Optional[str] = config_data.get("username")
         self.default_password: Optional[str] = config_data.get("password")
         
+        self.logger.info(f"✨ MedicoverClient initialized with default_profile_id={self.default_profile_id}")
+        
     def _mask_text(self, text: str, visible_chars: int = 3) -> str:
         """Maskuje tekst (np. login) zostawiając ostatnie znaki."""
         if not text: return "None"
-        if len(text) <= visible_chars: return "***"
-        return "***" + text[-visible_chars:]
+        text_str = str(text)
+        if len(text_str) <= visible_chars: return "***"
+        return "***" + text_str[-visible_chars:]
 
     # -----------------------------
     # Backward compatibility layer
@@ -76,8 +82,19 @@ class MedicoverClient:
 
     @current_token.setter
     def current_token(self, token: Optional[str]) -> None:
-        """Wsteczna kompatybilność: ustawia/usuwa token dla default_profile_id."""
+        """
+        Wsteczna kompatybilność: ustawia/usuwa token dla default_profile_id.
+        KRYTYCZNE: Używa default_profile_id, który MUSI być ustawiony na realny ID!
+        """
         profile_id = self.default_profile_id
+        
+        if profile_id == 0:
+            self.logger.warning(
+                "⚠️ UWAGA: Próba ustawienia tokenu dla profile_id=0! "
+                "To oznacza, że config_data['profile_id'] nie jest poprawnie przekazywane. "
+                "Token zostanie zapisany dla profile_id=0, co może powodować kolizje."
+            )
+        
         if not token:
             with self._tokens_lock:
                 self._tokens_by_profile.pop(profile_id, None)
@@ -159,7 +176,10 @@ class MedicoverClient:
         )
 
     def _ensure_valid_token(self, profile_id: int, reason: str) -> str:
-        """Zwraca ważny token dla profilu; w razie potrzeby odświeża (tylko dla tego profilu)."""
+        """
+        Zwraca ważny token dla profilu; w razie potrzeby odświeża (tylko dla tego profilu).
+        KRYTYCZNE: NIE odświeża tokenu co minutę, tylko gdy naprawdę blisko expiry!
+        """
         profile_id = int(profile_id)
         entry = self._get_token_entry(profile_id)
 
@@ -174,9 +194,11 @@ class MedicoverClient:
         age_s = int((datetime.now() - entry["issued_at"]).total_seconds())
         expires_in_s = int((entry["expires_at"] - datetime.now()).total_seconds())
 
+        # ZMIANA: Refresh TYLKO gdy zostało mniej niż REFRESH_BUFFER_SECONDS (30s)
+        # Nie odświeżamy tokenu z expires_in_s=400+ "dla pewności"
         if expires_in_s <= self.REFRESH_BUFFER_SECONDS:
             self.logger.info(
-                f"relogin profile_id={profile_id} reason=expires_soon({reason}) age_s={age_s}"
+                f"relogin profile_id={profile_id} reason=expires_soon({reason}) age_s={age_s} expires_in_s={expires_in_s}"
             )
             if not self._perform_relogin(profile_id):
                 raise LoginRequiredException(
