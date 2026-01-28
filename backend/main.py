@@ -1,4 +1,3 @@
-
 import os
 import sys
 import shutil
@@ -26,8 +25,22 @@ FRONTEND_DIR = ROOT_DIR / "frontend"
 
 sys.path.insert(0, str(ROOT_DIR))
 
-logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
+# Konfiguracja logowania z DEBUG i force flush dla Railway
+logging.basicConfig(
+    level=logging.DEBUG,
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
+    handlers=[
+        logging.StreamHandler(sys.stdout)
+    ]
+)
+# Force unbuffered output dla Railway
+sys.stdout.reconfigure(line_buffering=True)
+sys.stderr.reconfigure(line_buffering=True)
+
 logger = logging.getLogger(__name__)
+logger.info("=" * 80)
+logger.info("🚀 MEDIFINDER START - LOG LEVEL: DEBUG")
+logger.info("=" * 80)
 
 # --- SEEDING LOGIC ---
 def seed_config_files():
@@ -103,6 +116,7 @@ def seed_config_files():
 # Uruchom seedowanie przed startem aplikacji
 seed_config_files()
 
+logger.info("🔧 Inicjalizacja Flask...")
 app = Flask(__name__, static_folder=str(FRONTEND_DIR), static_url_path='')
 app.wsgi_app = ProxyFix(app.wsgi_app, x_proto=1, x_host=1)
 
@@ -114,7 +128,9 @@ app.config['SESSION_COOKIE_SECURE'] = True
 app.config['SESSION_COOKIE_HTTPONLY'] = True
 
 CORS(app, supports_credentials=True)
+logger.info("✅ Flask skonfigurowany")
 
+logger.info("🔐 Konfiguracja OAuth...")
 oauth = OAuth(app)
 app.config['GOOGLE_CLIENT_ID'] = os.environ.get('GOOGLE_CLIENT_ID')
 app.config['GOOGLE_CLIENT_SECRET'] = os.environ.get('GOOGLE_CLIENT_SECRET')
@@ -128,19 +144,25 @@ if app.config['GOOGLE_CLIENT_ID'] and app.config['GOOGLE_CLIENT_SECRET']:
         server_metadata_url=app.config['GOOGLE_DISCOVERY_URL'],
         client_kwargs={'scope': 'openid email profile'}
     )
+    logger.info("✅ OAuth Google skonfigurowany")
+else:
+    logger.warning("⚠️ Brak konfiguracji OAuth (sprawdź zmienne środowiskowe)")
 
 med_app = None
 scheduler = None
 
 try:
+    logger.info("📦 Import MedicoverApp...")
     from app.main import MedicoverApp
     from backend.scheduler import MedifinderScheduler
     logger.info("✅ MedicoverApp zaimportowany poprawnie")
     try:
+        logger.info("🏗️ Inicjalizacja MedicoverApp...")
         med_app = MedicoverApp(CONFIG_DIR)
         logger.info("✅ Medifinder zainicjalizowany globalnie")
         
         # Inicjalizacja schedulera
+        logger.info("⏱️ Inicjalizacja schedulera...")
         scheduler = MedifinderScheduler(CONFIG_DIR, med_app)
         logger.info("✅ Scheduler zainicjalizowany")
         
@@ -171,12 +193,14 @@ def require_login(fn):
 
 @app.route('/health', methods=['GET'])
 def health_check():
+    logger.debug("Health check called")
     return jsonify({'status': 'ok', 'service': 'Medifinder API', 'version': '2.0.0'}), 200
 
 @app.route('/api/v1/debug/config', methods=['GET'])
 @require_login
 def debug_config():
     """Sprawdza stan plików konfiguracyjnych. WYMAGA LOGOWANIA."""
+    logger.debug("Debug config endpoint called")
     status = {
         "config_dir": str(CONFIG_DIR),
         "seed_dir": str(SEED_DIR),
@@ -208,13 +232,17 @@ def debug_config():
 
 @app.route('/auth/login')
 def auth_login():
+    logger.info("Auth login request received")
     if not getattr(oauth, 'google', None):
+        logger.error("OAuth nie jest skonfigurowany")
         return jsonify({'success': False, 'error': 'OAuth nie jest skonfigurowany'}), 500
     redirect_uri = url_for('auth_callback', _external=True, _scheme='https')
+    logger.debug(f"Redirect URI: {redirect_uri}")
     return oauth.google.authorize_redirect(redirect_uri)
 
 @app.route('/auth/callback')
 def auth_callback():
+    logger.info("Auth callback received")
     try:
         token = oauth.google.authorize_access_token()
         user_info = token.get('userinfo') or oauth.google.userinfo()
@@ -231,13 +259,17 @@ def auth_callback():
 @app.route('/auth/logout', methods=['POST'])
 @require_login
 def auth_logout():
+    user_email = get_current_user_email()
+    logger.info(f"Wylogowanie użytkownika {user_email}")
     session.pop('user', None)
     return jsonify({'success': True})
 
 @app.route('/auth/me')
 def auth_me():
     if 'user' not in session:
+        logger.debug("Auth check: not authenticated")
         return jsonify({'authenticated': False})
+    logger.debug(f"Auth check: {session['user']['email']}")
     return jsonify({'authenticated': True, 'user': session['user']})
 
 # ======== SCHEDULER API =========
@@ -246,11 +278,14 @@ def auth_me():
 @require_login
 def scheduler_start():
     """Uruchamia zadanie cyklicznego sprawdzania dla użytkownika."""
+    logger.info("Scheduler start request")
     if not scheduler:
+        logger.error("Scheduler nie jest zainicjalizowany")
         return jsonify({'success': False, 'error': 'Scheduler nie jest zainicjalizowany'}), 500
     
     user_email = get_current_user_email()
     data = request.get_json() or {}
+    logger.debug(f"Scheduler start data: {data}")
     
     try:
         result = scheduler.start_task(
@@ -263,7 +298,7 @@ def scheduler_start():
                 'preferred_days': data.get('preferred_days', []),
                 'time_range': data.get('time_range'),
                 'excluded_dates': data.get('excluded_dates', []),
-                'day_time_ranges': data.get('day_time_ranges', {}), # NOWE
+                'day_time_ranges': data.get('day_time_ranges', {}),
                 'start_date': data.get('start_date'),
                 'end_date': data.get('end_date')
             },
@@ -271,10 +306,11 @@ def scheduler_start():
             auto_book=data.get('auto_book', False),
             twin_profile=data.get('twin_profile')
         )
-        # Jeśli scheduler zwrócił błąd (np. limit zadań), przekaż go z odpowiednim kodem
         if not result.get('success'):
+             logger.warning(f"Scheduler start failed: {result.get('error')}")
              return jsonify(result), 409
 
+        logger.info(f"Scheduler started successfully for {user_email}")
         return jsonify(result), 200
     except Exception as e:
         logger.error(f"Błąd uruchamiania zadania: {e}", exc_info=True)
@@ -284,6 +320,7 @@ def scheduler_start():
 @require_login
 def scheduler_stop():
     """Zatrzymuje zadanie cyklicznego sprawdzania."""
+    logger.info("Scheduler stop request")
     if not scheduler:
         return jsonify({'success': False, 'error': 'Scheduler nie jest zainicjalizowany'}), 500
     
@@ -292,6 +329,7 @@ def scheduler_stop():
     
     try:
         result = scheduler.stop_task(user_email, data.get('profile'))
+        logger.info(f"Scheduler stopped for {user_email}")
         return jsonify(result), 200
     except Exception as e:
         logger.error(f"Błąd zatrzymywania zadania: {e}", exc_info=True)
@@ -313,8 +351,10 @@ def scheduler_status():
     try:
         status = scheduler.get_task_status(user_email, profile)
         if status:
+            logger.debug(f"Scheduler status for {user_email}/{profile}: active")
             return jsonify({'success': True, 'data': status}), 200
         else:
+            logger.debug(f"Scheduler status for {user_email}/{profile}: inactive")
             return jsonify({'success': True, 'data': None, 'message': 'Brak aktywnego zadania'}), 200
     except Exception as e:
         logger.error(f"Błąd pobierania statusu: {e}", exc_info=True)
@@ -336,8 +376,10 @@ def scheduler_results():
     try:
         results = scheduler.get_last_results(user_email, profile)
         if results:
+            logger.debug(f"Scheduler results for {user_email}/{profile}: {len(results.get('appointments', []))} appointments")
             return jsonify({'success': True, 'data': results}), 200
         else:
+            logger.debug(f"Scheduler results for {user_email}/{profile}: no results")
             return jsonify({'success': True, 'data': None, 'message': 'Brak wyników'}), 200
     except Exception as e:
         logger.error(f"Błąd pobierania wyników: {e}", exc_info=True)
@@ -350,20 +392,26 @@ def scheduler_results():
 def get_profiles():
     if not med_app: return jsonify({'success': False, 'error': 'App not init'}), 500
     user_email = get_current_user_email()
+    logger.debug(f"Getting profiles for {user_email}")
     try:
         profiles = med_app.get_available_profiles(user_email)
+        logger.info(f"Found {len(profiles)} profiles for {user_email}")
         return jsonify({'success': True, 'data': profiles, 'count': len(profiles)}), 200
-    except Exception as e: return jsonify({'success': False, 'error': str(e)}), 500
+    except Exception as e: 
+        logger.error(f"Error getting profiles: {e}", exc_info=True)
+        return jsonify({'success': False, 'error': str(e)}), 500
 
 @app.route('/api/v1/profiles/add', methods=['POST'])
 @require_login
 def add_profile():
     if not med_app: return jsonify({'success': False, 'error': 'App not init'}), 500
     user_email = get_current_user_email()
+    logger.info(f"Adding profile for {user_email}")
     try:
         # Check profiles limit per user
         current_profiles = med_app.get_available_profiles(user_email)
         if len(current_profiles) >= 5:
+            logger.warning(f"Profile limit reached for {user_email}")
             return jsonify({'success': False, 'error': 'Osiągnięto limit 5 profili'}), 400
 
         data = request.get_json() or {}
@@ -374,8 +422,11 @@ def add_profile():
             name=data.get('name'),
             is_child_account=data.get('is_child_account', False)
         )
+        logger.info(f"Profile added successfully for {user_email}")
         return jsonify({'success': True, 'message': 'Profil dodany'}), 201
-    except Exception as e: return jsonify({'success': False, 'error': str(e)}), 500
+    except Exception as e: 
+        logger.error(f"Error adding profile: {e}", exc_info=True)
+        return jsonify({'success': False, 'error': str(e)}), 500
 
 # ======== DICTIONARIES API =========
 
@@ -400,8 +451,11 @@ def get_specialties():
             else:
                 if not details.get("for_child_account_only", False):
                     result.append({"name": name, "ids": details["ids"]})
+        logger.debug(f"Returning {len(result)} specialties")
         return jsonify({'success': True, 'data': sorted(result, key=lambda x: x['name'])})
-    except Exception as e: return jsonify({'success': False, 'error': str(e)}), 500
+    except Exception as e: 
+        logger.error(f"Error getting specialties: {e}", exc_info=True)
+        return jsonify({'success': False, 'error': str(e)}), 500
 
 @app.route('/api/v1/dictionaries/doctors', methods=['GET'])
 @require_login
@@ -410,8 +464,11 @@ def get_doctors():
     try:
         data = med_app.doctor_manager.get_all_doctors_data()
         result = [{"name": k, "id": v["id"], "specialty_ids": v.get("specialty_ids", [])} for k, v in data.items()]
+        logger.debug(f"Returning {len(result)} doctors")
         return jsonify({'success': True, 'data': sorted(result, key=lambda x: x['name'])})
-    except Exception as e: return jsonify({'success': False, 'error': str(e)}), 500
+    except Exception as e: 
+        logger.error(f"Error getting doctors: {e}", exc_info=True)
+        return jsonify({'success': False, 'error': str(e)}), 500
 
 @app.route('/api/v1/dictionaries/clinics', methods=['GET'])
 @require_login
@@ -420,8 +477,11 @@ def get_clinics():
     try:
         data = med_app.clinic_manager.data
         result = [{"name": k, "id": v["id"]} for k, v in data.items()]
+        logger.debug(f"Returning {len(result)} clinics")
         return jsonify({'success': True, 'data': sorted(result, key=lambda x: x['name'])})
-    except Exception as e: return jsonify({'success': False, 'error': str(e)}), 500
+    except Exception as e: 
+        logger.error(f"Error getting clinics: {e}", exc_info=True)
+        return jsonify({'success': False, 'error': str(e)}), 500
 
 # ======== APPOINTMENTS API =========
 
@@ -430,13 +490,16 @@ def get_clinics():
 def search_appointments():
     if not med_app: return jsonify({'success': False, 'error': 'App not init'}), 500
     user_email = get_current_user_email()
+    logger.info(f"Search appointments request from {user_email}")
     try:
         data = request.get_json() or {}
         
         specialty_ids = data.get('specialty_ids')
         if not specialty_ids or len(specialty_ids) == 0:
+             logger.warning("Search without specialty_ids")
              return jsonify({'success': False, 'error': 'Specjalność jest obowiązkowa'}), 400
 
+        logger.debug(f"Search params: {data}")
         results = med_app.search_appointments(
             user_email=user_email,
             profile=data.get('profile'),
@@ -445,20 +508,24 @@ def search_appointments():
             clinic_ids=data.get('clinic_ids'),
             preferred_days=data.get('preferred_days', []),
             time_range=data.get('time_range'),
-            day_time_ranges=data.get('day_time_ranges', {}), # NOWE
-            excluded_dates=data.get('excluded_dates', []), # NOWE
+            day_time_ranges=data.get('day_time_ranges', {}),
+            excluded_dates=data.get('excluded_dates', []),
             start_date=data.get('start_date'),
             end_date=data.get('end_date'),
             headless=True
         )
+        logger.info(f"Search completed: {len(results)} results")
         return jsonify({'success': True, 'count': len(results), 'data': results}), 200
-    except Exception as e: return jsonify({'success': False, 'error': str(e)}), 500
+    except Exception as e: 
+        logger.error(f"Error searching appointments: {e}", exc_info=True)
+        return jsonify({'success': False, 'error': str(e)}), 500
 
 @app.route('/api/v1/appointments/book', methods=['POST'])
 @require_login
 def book_appointment():
     if not med_app: return jsonify({'success': False, 'error': 'App not init'}), 500
     user_email = get_current_user_email()
+    logger.info(f"Book appointment request from {user_email}")
     try:
         data = request.get_json() or {}
         result = med_app.book_appointment(
@@ -467,13 +534,17 @@ def book_appointment():
             appointment_id=data.get('appointment_id'),
             booking_string=data.get('booking_string') or data.get('bookingString')
         )
+        logger.info(f"Booking result: {result.get('success')}")
         return jsonify(result), 200
-    except Exception as e: return jsonify({'success': False, 'error': str(e)}), 500
+    except Exception as e: 
+        logger.error(f"Error booking appointment: {e}", exc_info=True)
+        return jsonify({'success': False, 'error': str(e)}), 500
 
 # ======== SERVING FRONTEND =========
 
 @app.route('/')
 def index():
+    logger.debug("Serving index.html")
     return send_from_directory(app.static_folder, 'index.html')
 
 @app.route('/<path:path>')
@@ -485,6 +556,12 @@ def serve_static(path):
     return send_from_directory(app.static_folder, 'index.html')
 
 if __name__ == '__main__':
-    if not med_app: logger.error("Global init failed")
+    if not med_app: 
+        logger.error("❌ Global init failed - med_app is None")
+    else:
+        logger.info("✅ All systems initialized")
+    
     port = int(os.environ.get('PORT', 5000))
+    logger.info(f"🚀 Starting Flask on 0.0.0.0:{port}")
+    logger.info("=" * 80)
     app.run(host='0.0.0.0', port=port, debug=os.environ.get('FLASK_DEBUG')=='True', threaded=True)
