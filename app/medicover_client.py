@@ -78,11 +78,20 @@ class MedicoverClient:
             return
 
         username, password = self._get_credentials_for_profile(profile_id)
+        # Fallback jeśli nie mamy zapisanych credentials dla profilu
+        if not username:
+             username = self.default_username
+        if not password:
+             password = self.default_password
+
         if not username or not password:
-            self.logger.error(
-                f"Nie można ustawić current_token bez credentials (profile_id={profile_id})."
+            self.logger.warning(
+                f"Ustawiono current_token bez pełnych credentials (profile_id={profile_id}). "
+                "Automatyczne odświeżanie może nie zadziałać."
             )
-            return
+            # Mimo braku creds, zapisujemy token, żeby "działało" doraźnie
+            username = username or "unknown"
+            password = password or "unknown"
 
         self._set_token_entry(profile_id, token, username, password)
 
