@@ -178,7 +178,7 @@ function formatFirstAppointmentHint(appointments) {
     const iso = first?.appointmentDate || first?.appointment_date;
     if (!iso) return '';
 
-    const d = parseUtcDate(iso) || new Date(iso);
+    const d = new Date(iso);
     if (!d || Number.isNaN(d.getTime())) return '';
 
     const day = d.toLocaleDateString('pl-PL');
