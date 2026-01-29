@@ -13,6 +13,10 @@ let state = {
     searchResults: [],
     selectedAppointment: null, // Currently selected appointment for booking
     schedulerStatus: null,
+
+    // Timestamp (ISO) of when currently displayed results were fetched/updated.
+    resultsTimestampIso: null,
+
     ui: {
         filtersLocked: false,
         notificationsReady: false,
@@ -354,6 +358,37 @@ function parseUtcDate(isoStr) {
     return new Date(`${s}Z`);
 }
 
+function formatLocalDateTime(isoStr, includeSeconds = true) {
+    const d = parseUtcDate(isoStr);
+    if (!d || Number.isNaN(d.getTime())) return '--';
+
+    const date = d.toLocaleDateString('pl-PL');
+    const opts = { hour: '2-digit', minute: '2-digit' };
+    if (includeSeconds) {
+        opts.second = '2-digit';
+    }
+    const time = d.toLocaleTimeString('pl-PL', opts);
+
+    return `${date}, ${time}`;
+}
+
+function renderResultsTimestamp() {
+    const el = document.getElementById('resultsTimestamp');
+    if (!el) return;
+
+    if (!state.resultsTimestampIso) {
+        el.textContent = '';
+        return;
+    }
+
+    el.textContent = `Wyniki z: ${formatLocalDateTime(state.resultsTimestampIso, true)}`;
+}
+
+function setResultsTimestamp(isoStr) {
+    state.resultsTimestampIso = isoStr ? String(isoStr) : null;
+    renderResultsTimestamp();
+}
+
 function setManualSearchEnabled(enabled) {
     const btn = document.getElementById('searchBtn');
     if (!btn) return;
@@ -481,6 +516,7 @@ function populateTimeSelect(selectElement, defaultValue = '') {
 function clearResultsUI() {
     state.searchResults = [];
     state.selectedAppointment = null;
+    setResultsTimestamp(null);
 
     const bookBtn = document.getElementById('bookSelectedBtn');
     if (bookBtn) bookBtn.disabled = true;
@@ -511,6 +547,9 @@ document.addEventListener('DOMContentLoaded', async () => {
             twinSelect.style.display = e.target.checked ? 'inline-block' : 'none';
         });
     }
+
+    // Render empty timestamp placeholder on load.
+    renderResultsTimestamp();
 });
 
 // --- AUTH ---
@@ -918,6 +957,10 @@ async function handleSearch() {
         const json = await res.json();
         if (json.success) {
             state.searchResults = json.data;
+
+            // Results timestamp should indicate when the list was fetched.
+            setResultsTimestamp(new Date().toISOString());
+
             renderResults();
             document.getElementById('resultsSource').textContent = `(Znaleziono: ${json.count})`;
             saveState();
@@ -1244,6 +1287,10 @@ async function checkSchedulerStatus() {
             // If we have fresh results from scheduler, show them
             if (json.data.last_results && json.data.last_results.appointments) {
                 state.searchResults = json.data.last_results.appointments;
+
+                // Scheduler provides authoritative timestamp.
+                setResultsTimestamp(json.data.last_results.timestamp || new Date().toISOString());
+
                 renderResults();
                 document.getElementById('resultsSource').textContent = '(z Automatu)';
                 saveResultsState();
@@ -1298,6 +1345,9 @@ function updateFiltersFromUI() {
 function renderResults() {
     const tbody = document.getElementById('resultsBody');
     tbody.innerHTML = '';
+
+    // Always keep timestamp in sync with current state.
+    renderResultsTimestamp();
 
     if (state.searchResults.length === 0) {
         const tr = document.createElement('tr');
@@ -1763,7 +1813,7 @@ function saveResultsState() {
         const payload = {
             results: Array.isArray(state.searchResults) ? state.searchResults : [],
             resultsSource: (document.getElementById('resultsSource')?.textContent) || '',
-            ts: new Date().toISOString()
+            ts: state.resultsTimestampIso || new Date().toISOString()
         };
         localStorage.setItem(key, JSON.stringify(payload));
     } catch (e) {
@@ -1782,9 +1832,11 @@ function restoreResultsState() {
         const parsed = JSON.parse(raw);
         const results = Array.isArray(parsed?.results) ? parsed.results : [];
         const srcText = typeof parsed?.resultsSource === 'string' ? parsed.resultsSource : '';
+        const ts = parsed?.ts ? String(parsed.ts) : null;
 
         state.searchResults = results;
         state.selectedAppointment = null;
+        setResultsTimestamp(ts);
         renderResults();
 
         const src = document.getElementById('resultsSource');
