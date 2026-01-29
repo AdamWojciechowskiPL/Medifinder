@@ -34,7 +34,7 @@ class ChromeDriverFactory:
         logger.info("Tworzenie standardowego sterownika Chrome WebDriver...")
         while True: # Nieskończona pętla, którą przerwiemy po sukcesie
             try:
-                logger.info("Tworzenie standardowego sterownika Chrome WebDriver...")
+                # logger.info("Tworzenie standardowego sterownika Chrome WebDriver...") # REMOVED DUPLICATE LOG
                 options = self._get_chrome_options()
                 service = self._get_chrome_service()
                 driver = webdriver.Chrome(service=service, options=options)
