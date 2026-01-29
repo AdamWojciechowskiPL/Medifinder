@@ -1,4 +1,3 @@
-
 /**
  * MEDIFINDER 2.0 Frontend Script
  * Handles UI interactions, API calls, and data rendering
@@ -39,6 +38,9 @@ const FILTERS_LOCKED_TOAST = 'Wyłącz automat, aby zmienić filtry.';
 
 const FILTERS_STORAGE_PREFIX = 'medifinder_last_filters__';
 const LEGACY_FILTERS_KEY = 'medifinder_last_filters';
+
+// Results must be scoped per-profile (multi-profile UX).
+const RESULTS_STORAGE_PREFIX = 'medifinder_last_results__';
 
 const SELECTED_PROFILE_KEY = 'medifinder_selected_profile';
 
@@ -300,6 +302,12 @@ function getFiltersStorageKey(profileLogin) {
     return `${FILTERS_STORAGE_PREFIX}${encodeURIComponent(String(p))}`;
 }
 
+function getResultsStorageKey(profileLogin) {
+    const p = profileLogin || state.currentProfile;
+    if (!p) return null;
+    return `${RESULTS_STORAGE_PREFIX}${encodeURIComponent(String(p))}`;
+}
+
 function saveSelectedProfile(profileLogin) {
     if (!profileLogin) return;
     try {
@@ -470,6 +478,19 @@ function populateTimeSelect(selectElement, defaultValue = '') {
     }
 }
 
+function clearResultsUI() {
+    state.searchResults = [];
+    state.selectedAppointment = null;
+
+    const bookBtn = document.getElementById('bookSelectedBtn');
+    if (bookBtn) bookBtn.disabled = true;
+
+    const src = document.getElementById('resultsSource');
+    if (src) src.textContent = '';
+
+    renderResults();
+}
+
 // --- INIT ---
 document.addEventListener('DOMContentLoaded', async () => {
     checkAuthStatus();
@@ -581,8 +602,9 @@ function populateTwinProfileSelect() {
 function selectProfile(profileLogin) {
     const prevProfile = state.currentProfile;
     if (prevProfile && prevProfile !== profileLogin) {
-        // Persist filters of previous profile before switching.
+        // Persist filters & results of previous profile before switching.
         saveState();
+        saveResultsState();
     }
 
     state.currentProfile = profileLogin;
@@ -593,9 +615,15 @@ function selectProfile(profileLogin) {
     document.getElementById('currentProfileLabel').textContent = getProfileDisplayLabel(profileLogin);
     document.getElementById('profilesModal').classList.add('hidden');
 
+    // IMPORTANT: results must not leak between profiles.
+    clearResultsUI();
+
     // Reset filters to defaults and restore per-profile state
     state.filters = getDefaultFilters();
     restoreState();
+
+    // Restore results for this profile (if any)
+    restoreResultsState();
 
     // Refresh dictionaries for this profile
     loadDictionaries();
@@ -893,6 +921,7 @@ async function handleSearch() {
             renderResults();
             document.getElementById('resultsSource').textContent = `(Znaleziono: ${json.count})`;
             saveState();
+            saveResultsState();
         } else {
             showToast(json.error || 'Błąd wyszukiwania', 'error');
         }
@@ -934,6 +963,7 @@ async function handleBookSelected() {
             state.searchResults = state.searchResults.filter(a => a.appointmentId !== state.selectedAppointment.appointmentId);
             state.selectedAppointment = null;
             renderResults();
+            saveResultsState();
         } else {
             showToast(json.message || json.error || 'Błąd rezerwacji', 'error');
         }
@@ -1216,6 +1246,7 @@ async function checkSchedulerStatus() {
                 state.searchResults = json.data.last_results.appointments;
                 renderResults();
                 document.getElementById('resultsSource').textContent = '(z Automatu)';
+                saveResultsState();
             }
 
         } else {
@@ -1418,9 +1449,9 @@ function setupEventListeners() {
         renderExcludedDates();
         renderProfilesList();
         
-        // Clear selection
-        state.selectedAppointment = null;
-        renderResults();
+        // Clear selection + results
+        clearResultsUI();
+        saveResultsState();
 
         saveState();
     });
@@ -1722,4 +1753,43 @@ function restoreState() {
 
     // Restore other UI elements
     renderExcludedDates();
+}
+
+function saveResultsState() {
+    const key = getResultsStorageKey();
+    if (!key) return;
+
+    try {
+        const payload = {
+            results: Array.isArray(state.searchResults) ? state.searchResults : [],
+            resultsSource: (document.getElementById('resultsSource')?.textContent) || '',
+            ts: new Date().toISOString()
+        };
+        localStorage.setItem(key, JSON.stringify(payload));
+    } catch (e) {
+        console.warn('LocalStorage save results failed', key, e);
+    }
+}
+
+function restoreResultsState() {
+    const key = getResultsStorageKey();
+    if (!key) return;
+
+    const raw = lsGet(key);
+    if (!raw) return;
+
+    try {
+        const parsed = JSON.parse(raw);
+        const results = Array.isArray(parsed?.results) ? parsed.results : [];
+        const srcText = typeof parsed?.resultsSource === 'string' ? parsed.resultsSource : '';
+
+        state.searchResults = results;
+        state.selectedAppointment = null;
+        renderResults();
+
+        const src = document.getElementById('resultsSource');
+        if (src) src.textContent = srcText;
+    } catch (e) {
+        console.warn('LocalStorage restore results failed', key, e);
+    }
 }
