@@ -1342,6 +1342,44 @@ function updateFiltersFromUI() {
     }
 }
 
+function validateAndFixDates() {
+    // Skip validation if scheduler is active (dates managed by backend).
+    if (state.schedulerStatus && state.schedulerStatus.active) {
+        return;
+    }
+
+    const todayStr = new Date().toISOString().split('T')[0];
+    let changed = false;
+
+    // Rule 1: dateFrom must not be earlier than today.
+    if (state.filters.dateFrom && state.filters.dateFrom < todayStr) {
+        state.filters.dateFrom = todayStr;
+        changed = true;
+    }
+
+    // Rule 2: dateTo must be >= dateFrom. If not, set dateTo = dateFrom + 1 day.
+    if (state.filters.dateFrom && state.filters.dateTo) {
+        if (state.filters.dateTo < state.filters.dateFrom) {
+            const fromDate = new Date(state.filters.dateFrom);
+            const nextDay = new Date(fromDate);
+            nextDay.setDate(nextDay.getDate() + 1);
+            state.filters.dateTo = nextDay.toISOString().split('T')[0];
+            changed = true;
+        }
+    }
+
+    if (changed) {
+        // Apply corrected dates to UI.
+        const dateFromEl = document.getElementById('dateFrom');
+        const dateToEl = document.getElementById('dateTo');
+        if (dateFromEl) dateFromEl.value = state.filters.dateFrom;
+        if (dateToEl) dateToEl.value = state.filters.dateTo;
+
+        // Persist fixed dates.
+        saveState();
+    }
+}
+
 function renderResults() {
     const tbody = document.getElementById('resultsBody');
     tbody.innerHTML = '';
@@ -1803,6 +1841,9 @@ function restoreState() {
 
     // Restore other UI elements
     renderExcludedDates();
+
+    // Validate and fix dates after restore (only if scheduler is inactive).
+    validateAndFixDates();
 }
 
 function saveResultsState() {
