@@ -1,5 +1,3 @@
-# START OF FILE: chrome_driver_factory.py (Wersja bez undetected-chromedriver, z trybem awaryjnym)
-
 import logging
 import os
 import time
@@ -34,7 +32,6 @@ class ChromeDriverFactory:
         logger.info("Tworzenie standardowego sterownika Chrome WebDriver...")
         while True: # Nieskończona pętla, którą przerwiemy po sukcesie
             try:
-                # logger.info("Tworzenie standardowego sterownika Chrome WebDriver...") # REMOVED DUPLICATE LOG
                 options = self._get_chrome_options()
                 service = self._get_chrome_service()
                 driver = webdriver.Chrome(service=service, options=options)
@@ -73,13 +70,20 @@ class ChromeDriverFactory:
     def _get_chrome_options(self) -> webdriver.ChromeOptions:
         """Zwraca skonfigurowany obiekt ChromeOptions z opcjami maskującymi."""
         options = webdriver.ChromeOptions()
-        user_agent = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
+        # Zaktualizowany User-Agent do nowszej wersji Chrome (133), aby uniknąć wykrycia jako przestarzała przeglądarka
+        user_agent = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/133.0.0.0 Safari/537.36'
         
         # W środowisku Dockerowym Railway/Heroku/etc. te flagi są często niezbędne
         options.add_argument('--headless=new')
         options.add_argument('--no-sandbox')
         options.add_argument('--disable-dev-shm-usage')
         options.add_argument('--disable-gpu')
+        
+        # Dodatkowe flagi stabilizujące połączenie i unikające błędów SSL/Network
+        options.add_argument('--ignore-certificate-errors')
+        options.add_argument('--allow-running-insecure-content')
+        options.add_argument('--disable-search-engine-choice-screen')
+        options.add_argument('--disable-features=VizDisplayCompositor')
         
         if self.headless:
             # Wymuś headless jeśli tak skonfigurowano, ale powyższe flagi już to załatwiają w wielu przypadkach
@@ -141,8 +145,7 @@ class ChromeDriverFactory:
 
             return Service(driver_path)
         except Exception as e:
-            logger.error(f"Nie udało się skonfigurować usługi ChromeDriver: {e}")
-            raise
+            logger.error(f"Nie udało się skonfigurować usługi ChromeDriver: {e}")\n            raise
 
     def _apply_driver_settings(self, driver: webdriver.Chrome):
         """Aplikuje dodatkowe ustawienia do już utworzonej instancji sterownika."""
@@ -167,6 +170,7 @@ class ChromeDriverFactory:
             options.add_argument('--headless=new') # Wymuś headless w fallback
             options.add_argument('--no-sandbox')
             options.add_argument('--disable-dev-shm-usage')
+            options.add_argument('--ignore-certificate-errors')
             
             # Również tutaj binary location
             chrome_bin = os.environ.get("CHROME_BIN")
@@ -180,5 +184,3 @@ class ChromeDriverFactory:
         except Exception as e:
             logger.critical(f"Tryb awaryjny tworzenia sterownika również zawiódł: {e}")
             raise WebDriverException("Nie udało się utworzyć sterownika Chrome nawet w trybie awaryjnym.")
-
-# END OF FILE: chrome_driver_factory.py
