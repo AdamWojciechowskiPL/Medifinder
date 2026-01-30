@@ -45,7 +45,7 @@ class MedifinderScheduler:
                         self._schedule_task(task_id, task_data)
             else:
                 logger.info("Brak zapisanych zadań - tworzenie nowego pliku")
-                self.tasks = {}\
+                self.tasks = {}
         except Exception as e:
             logger.error(f"Błąd wczytywania zadań: {e}")
             self.tasks = {}
@@ -210,7 +210,7 @@ class MedifinderScheduler:
         is_twin_mode = bool(twin_profile)
         
         if not is_sniper_mode:
-             logger.info(f"🔍 [{task_id}] Rozpoczynam sprawdzanie (Twin Mode: {is_twin_mode})...")
+             logger.info(f"🔍 [{task_id}] Rozpoczynam sprawdzanie (Twin Mode: {is_twin_mode})....")
         
         try:
             now = datetime.now()
@@ -327,8 +327,7 @@ class MedifinderScheduler:
             if "429" in error_str or "Rate limit" in error_str or "RateLimitException" in error_str:
                 cooldown_minutes = 20
                 cooldown_until = datetime.now() + timedelta(minutes=cooldown_minutes)
-                self.tasks[task_id]['cooldown_until'] = cooldown_until.isoformat()
-                logger.warning(f"⛔️ [{task_id}] WYKRYTO TWARDĄ BLOKADĘ (429). Pauza do {cooldown_until.strftime('%H:%M:%S')} ({cooldown_minutes} min).")
+                self.tasks[task_id]['cooldown_until'] = cooldown_until.isoformat()\n                logger.warning(f"⛔️ [{task_id}] WYKRYTO TWARDĄ BLOKADĘ (429). Pauza do {cooldown_until.strftime('%H:%M:%S')} ({cooldown_minutes} min).")
             
             self._save_tasks()
     
@@ -381,8 +380,7 @@ class MedifinderScheduler:
         return {
             'success': True,
             'message': msg,
-            'task_id': task_id,
-            'next_run': task_data.get('next_run'),
+            'task_id': task_id,\n            'next_run': task_data.get('next_run'),
             'expires_at': expires_at.isoformat()
         }
     
