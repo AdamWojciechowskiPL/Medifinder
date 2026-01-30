@@ -145,7 +145,8 @@ class ChromeDriverFactory:
 
             return Service(driver_path)
         except Exception as e:
-            logger.error(f"Nie udało się skonfigurować usługi ChromeDriver: {e}")\n            raise
+            logger.error(f"Nie udało się skonfigurować usługi ChromeDriver: {e}")
+            raise
 
     def _apply_driver_settings(self, driver: webdriver.Chrome):
         """Aplikuje dodatkowe ustawienia do już utworzonej instancji sterownika."""
