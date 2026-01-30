@@ -10,6 +10,7 @@ import random
 from pathlib import Path
 from datetime import datetime, timedelta
 from typing import Dict, Any, Optional, List
+from zoneinfo import ZoneInfo
 from apscheduler.schedulers.background import BackgroundScheduler
 from apscheduler.triggers.interval import IntervalTrigger
 from apscheduler.jobstores.base import JobLookupError
@@ -44,7 +45,7 @@ class MedifinderScheduler:
                         self._schedule_task(task_id, task_data)
             else:
                 logger.info("Brak zapisanych zadań - tworzenie nowego pliku")
-                self.tasks = {}
+                self.tasks = {}\
         except Exception as e:
             logger.error(f"Błąd wczytywania zadań: {e}")
             self.tasks = {}
@@ -105,16 +106,64 @@ class MedifinderScheduler:
             logger.error(f"Błąd planowania zadania {task_id}: {e}")
     
     def _execute_task(self, task_id: str):
-        # --- JITTER LOGIC START ---
-        delay = random.uniform(1, 15)
-        pre_task_data = self.tasks.get(task_id)
-        if pre_task_data and pre_task_data.get('twin_profile') and str(pre_task_data.get('profile', '')).endswith('9'): 
-             delay += 10
-        logger.info(f"⏳ [Profile {task_id}] Oczekiwanie {delay:.2f}s przed startem (Jitter)...")
-        time.sleep(delay)
-        # --- JITTER LOGIC END ---
+        # --- SNIPER MODE LOGIC (MIDNIGHT CHECK) ---
+        pl_tz = ZoneInfo("Europe/Warsaw")
+        now_pl = datetime.now(pl_tz)
+        
+        # Calculate next midnight (approx)
+        # We take current time + 1 day, reset to 00:00:00.100 (100ms after midnight)
+        tomorrow_midnight = (now_pl + timedelta(days=1)).replace(hour=0, minute=0, second=0, microsecond=100000)
+        seconds_to_midnight = (tomorrow_midnight - now_pl).total_seconds()
+        
+        # Sniper Window: < 180 seconds (3 mins) before midnight
+        # This assumes the job runs frequently enough to catch this window
+        is_sniper_mode = 0 < seconds_to_midnight < 180
+        
+        if is_sniper_mode:
+            logger.info(f"🎯 [{task_id}] SNIPER MODE: Detected midnight approach in {seconds_to_midnight:.1f}s. Taking control.")
+            
+            # 1. Sync & Check Status Early
+            self._sync_tasks_from_file()
+            if task_id not in self.tasks: return
+            if not self.tasks[task_id].get('active', False): return
 
-        self._sync_tasks_from_file()
+            # 2. Warm-up (Refresh Token) if enough time (> 45s)
+            if seconds_to_midnight > 45:
+                logger.info(f"🔥 [{task_id}] Performing WARM-UP search to refresh session/token...")
+                try:
+                    # Execute a real search to force login/token refresh
+                    # We ignore results here, it's just for side-effects
+                    t_data = self.tasks[task_id]
+                    self.med_app.search_appointments(
+                        t_data['user_email'], 
+                        t_data['profile'], 
+                        **t_data['search_params']
+                    )
+                    logger.info(f"🔥 [{task_id}] Warm-up completed.")
+                except Exception as e:
+                    logger.warning(f"⚠️ [{task_id}] Warm-up warning: {e}")
+
+            # 3. Final Precise Wait
+            now_pl_final = datetime.now(pl_tz)
+            final_sleep = (tomorrow_midnight - now_pl_final).total_seconds()
+            
+            if final_sleep > 0:
+                logger.info(f"🎯 [{task_id}] Holding fire. Sleeping {final_sleep:.4f}s until 00:00:00.1...")
+                time.sleep(final_sleep)
+            
+            logger.info(f"🚀 [{task_id}] MIDNIGHT! FIRING REQUEST NOW!")
+
+        else:
+            # --- STANDARD JITTER MODE ---
+            delay = random.uniform(1, 15)
+            pre_task_data = self.tasks.get(task_id)
+            if pre_task_data and pre_task_data.get('twin_profile') and str(pre_task_data.get('profile', '')).endswith('9'): 
+                 delay += 10
+            logger.info(f"⏳ [{task_id}] Oczekiwanie {delay:.2f}s przed startem (Jitter)...")
+            time.sleep(delay)
+            self._sync_tasks_from_file()
+
+        # --- MAIN EXECUTION ---
         if task_id not in self.tasks: return
         task_data = self.tasks[task_id]
         if not task_data.get('active', False):
@@ -160,7 +209,8 @@ class MedifinderScheduler:
         twin_profile = task_data.get('twin_profile')
         is_twin_mode = bool(twin_profile)
         
-        logger.info(f"🔍 [{task_id}] Rozpoczynam sprawdzanie (Twin Mode: {is_twin_mode})...")
+        if not is_sniper_mode:
+             logger.info(f"🔍 [{task_id}] Rozpoczynam sprawdzanie (Twin Mode: {is_twin_mode})...")
         
         try:
             now = datetime.now()
