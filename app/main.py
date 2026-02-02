@@ -149,7 +149,8 @@ class MedicoverApp:
                                      preferred_days: List[int], 
                                      time_range: Dict[str, str],
                                      day_time_ranges: Dict[str, Dict[str, str]] = None,
-                                     excluded_dates: List[date] = None) -> List[Dict[str, Any]]:
+                                     excluded_dates: List[date] = None,
+                                     min_lead_time: Dict[str, int] = None) -> List[Dict[str, Any]]:
         """
         Rozszerzone filtrowanie wyników.
         """
@@ -168,9 +169,29 @@ class MedicoverApp:
                     parts = time_range['start'].split(':')
                     global_start_time = time(int(parts[0]), int(parts[1]))
                 if time_range.get('end'):
-                    parts = time_range['end'].split(':')
-                    global_end_time = time(int(parts[0]), int(parts[1]))
+                    parts = time_range['end'].split(':')\n                    global_end_time = time(int(parts[0]), int(parts[1]))
             except Exception: pass
+
+        # Obliczanie minimalnego czasu rozpoczęcia (lead time threshold)
+        min_start_time_threshold = None
+        if min_lead_time:
+            try:
+                hours = int(min_lead_time.get('hours', 2))
+                minutes = int(min_lead_time.get('minutes', 0))
+                # Używamy czasu lokalnego serwera (zakładamy zgodność strefy czasowej lub UTC -> Local konwersję)
+                # Ale Medifinder używa dat w obiektach datetime.
+                # Bezpieczniej użyć datetime.now() z timezone jeśli dostępne, lub naive jeśli app używa naive.
+                # App używa naive fromisoformat lub z 'Z'.
+                # Dla uproszczenia: appointments mają zazwyczaj datę z API.
+                now = datetime.now()
+                # Jeśli wizyty mają timezone info, musimy dodać je do now.
+                # Sprawdzimy na pierwszej wizycie czy ma tzinfo.
+                
+                delta = timedelta(hours=hours, minutes=minutes)
+                min_start_time_threshold = now + delta
+                
+            except Exception as e:
+                self.logger.warning(f"Błąd obliczania min_lead_time: {e}")
 
         self.logger.debug(f"START Filtrowanie pref: wejście={len(appointments)}")
 
@@ -180,20 +201,39 @@ class MedicoverApp:
                 filtered.append(apt) # Fail-open
                 continue
 
-            # 0. Sprawdź wykluczone daty (blacklist)
+            # 0. Min Lead Time Check (Last filter as requested, but implemented here for efficiency)
+            # Wymaganie: "ten nowy filtr ma być ostatnim filtrem". 
+            # Logicznie kolejność w kodzie nie zmienia wyniku AND, ale dla porządku damy na końcu pętli.
+            
+            # Dostosowanie strefy czasowej dla porównania
+            if min_start_time_threshold:
+                # Jeśli dt ma strefę (np. UTC), a threshold nie (local naive), musimy ujednolicić.
+                # _parse_appointment_date_dt zwraca offset-aware jeśli input miał Z.
+                threshold_to_compare = min_start_time_threshold
+                if dt.tzinfo and not min_start_time_threshold.tzinfo:
+                    # Zakładamy, że serwer jest w czasie lokalnym, a wizyty w UTC lub Local+Offset.
+                    # Najprościej: przekonwertować dt na naive local lub threshold na aware.
+                    # Zróbmy threshold aware (local timezone)
+                    threshold_to_compare = min_start_time_threshold.astimezone()
+
+                # Porównanie: jeśli wizyta jest wcześniej niż próg -> ODRZUĆ
+                if dt < threshold_to_compare:
+                    continue
+
+            # 1. Sprawdź wykluczone daty (blacklist)
             if excluded_dates:
                 apt_date = dt.date()
                 if apt_date in excluded_dates:
                     continue
 
-            # 1. Sprawdź dzień tygodnia (0=Pon, 6=Nd)
+            # 2. Sprawdź dzień tygodnia (0=Pon, 6=Nd)
             weekday = dt.weekday()
             
             # Jeśli user zaznaczył "dni tygodnia" w checkboxach, sprawdź to
             if preferred_days and weekday not in preferred_days:
                 continue
 
-            # 2. Sprawdź godziny
+            # 3. Sprawdź godziny
             t = dt.time()
             
             # Najpierw sprawdź czy dla tego dnia jest SPECIFICZNY zakres godzin
@@ -587,7 +627,8 @@ class MedicoverApp:
             kwargs.get('preferred_days'), 
             kwargs.get('time_range'),
             kwargs.get('day_time_ranges'),
-            excluded_dates
+            excluded_dates,
+            min_lead_time=kwargs.get('min_lead_time') # Pass parameter
         )
 
         if filtered: self._update_data_from_appointments(filtered)
