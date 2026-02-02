@@ -127,19 +127,15 @@ class MedifinderScheduler:
             if task_id not in self.tasks: return
             if not self.tasks[task_id].get('active', False): return
 
-            # 2. Warm-up (Refresh Token) if enough time (> 45s)
+            # 2. Warm-up (Force Refresh Token) if enough time (> 45s)
             if seconds_to_midnight > 45:
-                logger.info(f"🔥 [{task_id}] Performing WARM-UP search to refresh session/token...")
+                logger.info(f"🔥 [{task_id}] Performing FORCE REFRESH to get new token...")
                 try:
-                    # Execute a real search to force login/token refresh
-                    # We ignore results here, it's just for side-effects
                     t_data = self.tasks[task_id]
-                    self.med_app.search_appointments(
-                        t_data['user_email'], 
-                        t_data['profile'], 
-                        **t_data['search_params']
-                    )
-                    logger.info(f"🔥 [{task_id}] Warm-up completed.")
+                    if self.med_app.refresh_session(t_data['user_email'], t_data['profile']):
+                         logger.info(f"🔥 [{task_id}] Warm-up (Refresh) completed successfully.")
+                    else:
+                         logger.warning(f"⚠️ [{task_id}] Warm-up (Refresh) failed.")
                 except Exception as e:
                     logger.warning(f"⚠️ [{task_id}] Warm-up warning: {e}")
 
