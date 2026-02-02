@@ -281,8 +281,7 @@ def scheduler_start():
     logger.info("Scheduler start request")
     if not scheduler:
         logger.error("Scheduler nie jest zainicjalizowany")
-        return jsonify({'success': False, 'error': 'Scheduler nie jest zainicjalizowany'}), 500
-    
+        return jsonify({'success': False, 'error': 'Scheduler nie jest zainicjalizowany'}), 500\n    
     user_email = get_current_user_email()
     data = request.get_json() or {}
     logger.debug(f"Scheduler start data: {data}")
@@ -300,7 +299,8 @@ def scheduler_start():
                 'excluded_dates': data.get('excluded_dates', []),
                 'day_time_ranges': data.get('day_time_ranges', {}),
                 'start_date': data.get('start_date'),
-                'end_date': data.get('end_date')
+                'end_date': data.get('end_date'),
+                'min_lead_time': data.get('min_lead_time') # Pass new param
             },
             interval_minutes=data.get('interval_minutes', 5),
             auto_book=data.get('auto_book', False),
@@ -512,6 +512,7 @@ def search_appointments():
             excluded_dates=data.get('excluded_dates', []),
             start_date=data.get('start_date'),
             end_date=data.get('end_date'),
+            min_lead_time=data.get('min_lead_time'), # Pass new param
             headless=True
         )
         logger.info(f"Search completed: {len(results)} results")
