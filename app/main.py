@@ -283,7 +283,8 @@ class MedicoverApp:
                 return date.fromisoformat(d_str)
             except ValueError:
                 try:
-                    s = d_str.replace('Z', '+00:00')\n                    return datetime.fromisoformat(s).date()
+                    s = d_str.replace('Z', '+00:00')
+                    return datetime.fromisoformat(s).date()
                 except Exception:
                     return None
 
