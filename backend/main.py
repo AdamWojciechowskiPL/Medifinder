@@ -397,7 +397,8 @@ def get_profiles():
     try:
         profiles = med_app.get_available_profiles(user_email)
         logger.info(f"Found {len(profiles)} profiles for {user_email}")
-        return jsonify({'success': True, 'data': profiles, 'count': len(profiles)}), 200\n    except Exception as e: 
+        return jsonify({'success': True, 'data': profiles, 'count': len(profiles)}), 200
+    except Exception as e: 
         logger.error(f"Error getting profiles: {e}", exc_info=True)
         return jsonify({'success': False, 'error': str(e)}), 500
 
