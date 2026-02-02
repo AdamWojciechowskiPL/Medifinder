@@ -169,7 +169,8 @@ class MedicoverApp:
                     parts = time_range['start'].split(':')
                     global_start_time = time(int(parts[0]), int(parts[1]))
                 if time_range.get('end'):
-                    parts = time_range['end'].split(':')\n                    global_end_time = time(int(parts[0]), int(parts[1]))
+                    parts = time_range['end'].split(':')
+                    global_end_time = time(int(parts[0]), int(parts[1]))
             except Exception: pass
 
         # Obliczanie minimalnego czasu rozpoczęcia (lead time threshold)
@@ -282,8 +283,7 @@ class MedicoverApp:
                 return date.fromisoformat(d_str)
             except ValueError:
                 try:
-                    s = d_str.replace('Z', '+00:00')
-                    return datetime.fromisoformat(s).date()
+                    s = d_str.replace('Z', '+00:00')\n                    return datetime.fromisoformat(s).date()
                 except Exception:
                     return None
 
