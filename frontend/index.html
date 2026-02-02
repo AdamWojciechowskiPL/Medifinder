@@ -129,6 +129,19 @@
                         <div id="dayTimeRangesContainer" style="display: flex; flex-direction: column; gap: 6px;">
                             <!-- JS generated -->
                         </div>
+
+                        <!-- Minimum Lead Time Filter -->
+                        <h4 style="font-size: 0.9rem; margin-bottom: 8px; margin-top: 12px;">Minimalne wyprzedzenie (bufor)</h4>
+                        <div class="time-range" style="align-items: center; gap: 5px;">
+                            <div style="flex: 1; display: flex; align-items: center; gap: 5px;">
+                                <input type="number" id="minLeadTimeHours" class="form-control form-control-sm" value="2" min="0" max="24" style="width: 50px;">
+                                <label for="minLeadTimeHours" style="margin: 0; font-size: 0.8rem;">godz</label>
+                            </div>
+                            <div style="flex: 1; display: flex; align-items: center; gap: 5px;">
+                                <input type="number" id="minLeadTimeMinutes" class="form-control form-control-sm" value="0" min="0" max="59" style="width: 50px;">
+                                <label for="minLeadTimeMinutes" style="margin: 0; font-size: 0.8rem;">min</label>
+                            </div>
+                        </div>
                     </div>
                 </div>
 
