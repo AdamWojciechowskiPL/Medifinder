@@ -132,10 +132,21 @@ class MedifinderScheduler:
                 logger.info(f"🔥 [{task_id}] Performing FORCE REFRESH to get new token...")
                 try:
                     t_data = self.tasks[task_id]
+                    # Refresh main profile
                     if self.med_app.refresh_session(t_data['user_email'], t_data['profile']):
-                         logger.info(f"🔥 [{task_id}] Warm-up (Refresh) completed successfully.")
+                         logger.info(f"🔥 [{task_id}] Warm-up (Refresh) for main profile completed.")
                     else:
-                         logger.warning(f"⚠️ [{task_id}] Warm-up (Refresh) failed.")
+                         logger.warning(f"⚠️ [{task_id}] Warm-up (Refresh) for main profile failed.")
+                    
+                    # Refresh twin profile if exists
+                    twin_profile = t_data.get('twin_profile')
+                    if twin_profile:
+                        logger.info(f"🔥 [{task_id}] Performing FORCE REFRESH for TWIN profile: {twin_profile}...")
+                        if self.med_app.refresh_session(t_data['user_email'], twin_profile):
+                            logger.info(f"🔥 [{task_id}] Warm-up (Refresh) for twin profile completed.")
+                        else:
+                            logger.warning(f"⚠️ [{task_id}] Warm-up (Refresh) for twin profile failed.")
+
                 except Exception as e:
                     logger.warning(f"⚠️ [{task_id}] Warm-up warning: {e}")
 
