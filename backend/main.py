@@ -281,7 +281,8 @@ def scheduler_start():
     logger.info("Scheduler start request")
     if not scheduler:
         logger.error("Scheduler nie jest zainicjalizowany")
-        return jsonify({'success': False, 'error': 'Scheduler nie jest zainicjalizowany'}), 500\n    
+        return jsonify({'success': False, 'error': 'Scheduler nie jest zainicjalizowany'}), 500
+    
     user_email = get_current_user_email()
     data = request.get_json() or {}
     logger.debug(f"Scheduler start data: {data}")
@@ -396,8 +397,7 @@ def get_profiles():
     try:
         profiles = med_app.get_available_profiles(user_email)
         logger.info(f"Found {len(profiles)} profiles for {user_email}")
-        return jsonify({'success': True, 'data': profiles, 'count': len(profiles)}), 200
-    except Exception as e: 
+        return jsonify({'success': True, 'data': profiles, 'count': len(profiles)}), 200\n    except Exception as e: 
         logger.error(f"Error getting profiles: {e}", exc_info=True)
         return jsonify({'success': False, 'error': str(e)}), 500
 
