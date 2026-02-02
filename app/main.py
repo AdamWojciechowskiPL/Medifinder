@@ -369,6 +369,64 @@ class MedicoverApp:
         Zostawione jako pusta metoda dla kompatybilności wstecznej (jeśli ktoś używa).
         """
         pass
+        
+    def refresh_session(self, user_email: str, profile: str) -> bool:
+        """
+        Wymusza odświeżenie sesji (nowy login + token) dla danego profilu.
+        Czyści cache i loguje się ponownie przez Selenium.
+        """
+        if not user_email or not profile: return False
+        
+        # Używamy blokady użytkownika, aby nie wchodzić w konflikt z normalnym search
+        user_lock = self._get_user_lock(user_email)
+        with user_lock:
+            credentials = self.profile_manager.get_credentials(user_email, profile)
+            if not credentials: return False
+            username, password = credentials
+            
+            # 1. Wyczyść cache dla tego konta
+            key = self._get_cache_key(user_email, username)
+            with self._session_lock:
+                if key in self._session_cache:
+                    self.logger.info(f"🧹 (Refresh) Czyszczenie cache dla {self._mask_text(key)}.")
+                    del self._session_cache[key]
+            
+            # 2. Wykonaj logowanie
+            client_config = self.config.data.copy()
+            client_config['username'] = username
+            client_config['password'] = password
+            
+            try:
+                p_id = int(username)
+                client_config['profile_id'] = p_id
+            except ValueError:
+                self.logger.error(f"Invalid username: {username}")
+                return False
+
+            try:
+                # Tworzymy instancję klienta
+                temp_client = MedicoverClient(client_config)
+                self.logger.info(f"🔥 (Force Refresh) Logowanie Selenium dla {self._mask_text(user_email)}...")
+                
+                if temp_client.login(username, password, profile_id=p_id):
+                    # Pobierz i zapisz nowy token
+                    entry = temp_client.get_token_entry(p_id)
+                    if entry:
+                        self._cache_session(
+                            user_email, username, 
+                            entry['token'], 
+                            entry['issued_at'], 
+                            entry['expires_at']
+                        )
+                        self.logger.info(f"✅ (Force Refresh) Sukces. Nowy token ważny do {entry['expires_at'].strftime('%H:%M:%S')}.")
+                        return True
+                
+                self.logger.warning(f"❌ (Force Refresh) Logowanie nieudane.")
+                return False
+                
+            except Exception as e:
+                self.logger.error(f"Błąd podczas refresh_session: {e}", exc_info=True)
+                return False
 
     def search_appointments(self, user_email: str = None, profile: str = None, **kwargs) -> List[Dict[str, Any]]:
         if not user_email or not profile: return []
