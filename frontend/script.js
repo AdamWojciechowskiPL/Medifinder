@@ -32,6 +32,7 @@ let state = {
         preferredDays: [],
         excludedDates: [],
         dayTimeRanges: {}, // { "0": {start: "08:00", end: "16:00"}, ... }
+        minLeadTime: { hours: 2, minutes: 0 } // Default minimum lead time
     }
 };
 
@@ -252,7 +253,8 @@ function getDefaultFilters() {
         timeRange: { start: '04:00', end: '22:00' },
         preferredDays: [],
         excludedDates: [],
-        dayTimeRanges: {}
+        dayTimeRanges: {},
+        minLeadTime: { hours: 2, minutes: 0 }
     };
 }
 
@@ -350,7 +352,7 @@ function parseUtcDate(isoStr) {
     const s = String(isoStr).trim();
 
     // If string already has a timezone (Z or offset), Date() will convert to local automatically.
-    if (/[zZ]$/.test(s) || /[+-]\d\d:?\d\d$/.test(s)) {
+    if (/[zZ]$/.test(s) || /[+-]\\d\\d:?\\d\\d$/.test(s)) {
         return new Date(s);
     }
 
@@ -424,7 +426,8 @@ function setFiltersEnabled(enabled) {
     state.ui.filtersLocked = locked;
 
     // Filters panel main inputs
-    ['specialtySelect', 'dateFrom', 'dateTo', 'timeFrom', 'timeTo', 'toggleAdvancedFilters', 'excludeDateInput', 'addExcludedDateBtn', 'resetBtn'].forEach(id => {
+    ['specialtySelect', 'dateFrom', 'dateTo', 'timeFrom', 'timeTo', 'toggleAdvancedFilters', 
+     'excludeDateInput', 'addExcludedDateBtn', 'resetBtn', 'minLeadTimeHours', 'minLeadTimeMinutes'].forEach(id => {
         const el = document.getElementById(id);
         if (el) el.disabled = locked;
     });
@@ -1029,7 +1032,8 @@ function buildSearchPayload() {
         preferred_days: state.filters.preferredDays,
         time_range: state.filters.timeRange,
         day_time_ranges: state.filters.dayTimeRanges,
-        excluded_dates: state.filters.excludedDates
+        excluded_dates: state.filters.excludedDates,
+        min_lead_time: state.filters.minLeadTime
     };
 }
 
@@ -1078,6 +1082,14 @@ function buildFiltersFromSearchParams(searchParams) {
         base.dayTimeRanges = sp.day_time_ranges;
     }
 
+    // Min lead time
+    if (sp.min_lead_time && typeof sp.min_lead_time === 'object') {
+        base.minLeadTime = {
+            hours: parseInt(sp.min_lead_time.hours || 0, 10),
+            minutes: parseInt(sp.min_lead_time.minutes || 0, 10)
+        };
+    }
+
     return base;
 }
 
@@ -1090,6 +1102,12 @@ function applyFiltersToUI() {
 
     // Time
     applyTimeRangeToUI();
+
+    // Min Lead Time
+    const leadH = document.getElementById('minLeadTimeHours');
+    const leadM = document.getElementById('minLeadTimeMinutes');
+    if (leadH) leadH.value = state.filters.minLeadTime.hours || 0;
+    if (leadM) leadM.value = state.filters.minLeadTime.minutes || 0;
 
     // Specialty + dependent doctors
     if (Array.isArray(state.specialties) && state.specialties.length > 0) {
@@ -1340,6 +1358,16 @@ function updateFiltersFromUI() {
     if (timeToEl && timeToEl.value) {
         state.filters.timeRange.end = timeToEl.value;
     }
+
+    // Min Lead Time
+    const leadH = document.getElementById('minLeadTimeHours');
+    const leadM = document.getElementById('minLeadTimeMinutes');
+    if (leadH && leadM) {
+        state.filters.minLeadTime = {
+            hours: parseInt(leadH.value || 0, 10),
+            minutes: parseInt(leadM.value || 0, 10)
+        };
+    }
 }
 
 function validateAndFixDates() {
@@ -1489,6 +1517,22 @@ function setupEventListeners() {
         });
     });
 
+    // Min Lead Time inputs change
+    ['minLeadTimeHours', 'minLeadTimeMinutes'].forEach(id => {
+        const el = document.getElementById(id);
+        if(el) {
+            el.addEventListener('change', () => {
+                 if (state.ui.filtersLocked) {
+                    showToast(FILTERS_LOCKED_TOAST, 'info');
+                    return;
+                }
+                updateFiltersFromUI();
+                saveState();
+            });
+        }
+    });
+
+
     // Scheduler Switch
     document.getElementById('enableAutoCheck').addEventListener('change', (e) => {
         if (e.target.checked) {
@@ -1512,6 +1556,7 @@ function setupEventListeners() {
         state.filters.preferredDays = [];
         state.filters.excludedDates = [];
         state.filters.dayTimeRanges = {};
+        state.filters.minLeadTime = { hours: 2, minutes: 0 };
 
         // Reset defaults for dates
         const now = new Date();
@@ -1529,6 +1574,12 @@ function setupEventListeners() {
         document.getElementById('dateTo').value = state.filters.dateTo;
         applyTimeRangeToUI();
         document.getElementById('excludedDatesList').innerHTML = "";
+        
+        const leadH = document.getElementById('minLeadTimeHours');
+        const leadM = document.getElementById('minLeadTimeMinutes');
+        if (leadH) leadH.value = 2;
+        if (leadM) leadM.value = 0;
+
 
         // Refresh
         filterDoctorsBySpecialty();
