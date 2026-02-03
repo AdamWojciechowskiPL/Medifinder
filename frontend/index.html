@@ -167,26 +167,32 @@
                         </div>
                         
                         <!-- MODE SELECTION -->
-                        <div class="mode-select" style="display: flex; gap: 10px; margin-left: 10px; align-items: center;">
-                            <label class="radio-label" title="Sprawdza co X minut przez 24h">
-                                <input type="radio" name="schedulerMode" value="interval" checked> Interwał
-                            </label>
-                            <label class="radio-label" title="Loguje się 23:55, sprawdza 00:00-00:05. Działa codziennie.">
+                        <div class="mode-select" style="display: flex; gap: 15px; margin-left: 10px; align-items: center;">
+                            
+                            <!-- Interval Group -->
+                            <div style="display: flex; align-items: center; gap: 5px;">
+                                <label class="radio-label" title="Sprawdza co X minut przez 24h" style="margin-bottom: 0;">
+                                    <input type="radio" name="schedulerMode" value="interval" checked> Interwał
+                                </label>
+                                
+                                <div class="interval-select" id="intervalSelectContainer" style="margin-left: 5px;">
+                                    <span style="margin-right: 5px;">co</span>
+                                    <select id="checkInterval" class="form-control form-control-sm" style="width: auto; padding: 2px 5px;">
+                                        <option value="1">1 min</option>
+                                        <option value="2">2 min</option>
+                                        <option value="5" selected>5 min</option>
+                                        <option value="10">10 min</option>
+                                        <option value="15">15 min</option>
+                                        <option value="30">30 min</option>
+                                        <option value="60">60 min</option>
+                                    </select>
+                                </div>
+                            </div>
+
+                            <!-- Sniper Group -->
+                            <label class="radio-label" title="Loguje się 23:55, sprawdza 00:00-00:05. Działa codziennie." style="margin-bottom: 0;">
                                 <input type="radio" name="schedulerMode" value="midnight"> 🎯 Snajper (00:00)
                             </label>
-                        </div>
-
-                        <div class="interval-select" id="intervalSelectContainer">
-                            <span>co</span>
-                            <select id="checkInterval" class="form-control form-control-sm" style="width: auto;">
-                                <option value="1">1 min</option>
-                                <option value="2">2 min</option>
-                                <option value="5" selected>5 min</option>
-                                <option value="10">10 min</option>
-                                <option value="15">15 min</option>
-                                <option value="30">30 min</option>
-                                <option value="60">60 min</option>
-                            </select>
                         </div>
                     </div>
                     
