@@ -291,6 +291,7 @@ def scheduler_start():
         result = scheduler.start_task(
             user_email=user_email,
             profile=data.get('profile'),
+            mode=data.get('mode', 'interval'), # Add mode support
             search_params={
                 'specialty_ids': data.get('specialty_ids', []),
                 'doctor_ids': data.get('doctor_ids', []),
