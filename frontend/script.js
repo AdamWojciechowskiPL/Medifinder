@@ -352,7 +352,7 @@ function parseUtcDate(isoStr) {
     const s = String(isoStr).trim();
 
     // If string already has a timezone (Z or offset), Date() will convert to local automatically.
-    if (/[zZ]$/.test(s) || /[+-]\\d\\d:?\\d\\d$/.test(s)) {
+    if (/[zZ]$/.test(s) || /[+-]\d\d:?\d\d$/.test(s)) {
         return new Date(s);
     }
 
@@ -468,6 +468,17 @@ function setSchedulerOptionsEnabled(enabled) {
         const el = document.getElementById(id);
         if (el) el.disabled = locked;
     });
+    // Radio buttons
+    document.querySelectorAll('input[name="schedulerMode"]').forEach(el => el.disabled = locked);
+}
+
+// Helper to toggle interval visibility
+function updateSchedulerModeUI() {
+    const mode = document.querySelector('input[name="schedulerMode"]:checked')?.value || 'interval';
+    const container = document.getElementById('intervalSelectContainer');
+    if (container) {
+        container.style.display = (mode === 'interval') ? 'flex' : 'none';
+    }
 }
 
 function applyTimeRangeToUI() {
@@ -553,6 +564,9 @@ document.addEventListener('DOMContentLoaded', async () => {
 
     // Render empty timestamp placeholder on load.
     renderResultsTimestamp();
+    
+    // Init scheduler mode UI
+    updateSchedulerModeUI();
 });
 
 // --- AUTH ---
@@ -1154,6 +1168,14 @@ function syncSchedulerOptionsFromBackend(st) {
         autoBookEl.checked = Boolean(st.auto_book);
     }
 
+    // Restore Mode
+    const mode = st.mode || 'interval';
+    const rad = document.querySelector(`input[name="schedulerMode"][value="${mode}"]`);
+    if (rad) {
+        rad.checked = true;
+        updateSchedulerModeUI();
+    }
+
     // Restore Twin Booking checkbox and select
     const twinCheckEl = document.getElementById('enableTwinBooking');
     const twinSelectEl = document.getElementById('twinProfileSelect');
@@ -1192,6 +1214,7 @@ async function startScheduler() {
     unlockAudio();
     ensureNotificationPermission();
 
+    const mode = document.querySelector('input[name="schedulerMode"]:checked')?.value || 'interval';
     const interval = document.getElementById('checkInterval').value;
     const autoBook = document.getElementById('autoBook').checked;
 
@@ -1208,6 +1231,7 @@ async function startScheduler() {
 
     const payload = {
         ...buildSearchPayload(),
+        mode: mode,
         interval_minutes: parseInt(interval),
         auto_book: autoBook,
         twin_profile: twinEnabled ? twinProfile : null
@@ -1542,6 +1566,11 @@ function setupEventListeners() {
         }
     });
 
+    // Scheduler Mode Change
+    document.querySelectorAll('input[name="schedulerMode"]').forEach(el => {
+        el.addEventListener('change', updateSchedulerModeUI);
+    });
+
     // Reset Button
     document.getElementById('resetBtn').addEventListener('click', () => {
         if (state.ui.filtersLocked) {
@@ -1579,6 +1608,13 @@ function setupEventListeners() {
         const leadM = document.getElementById('minLeadTimeMinutes');
         if (leadH) leadH.value = 2;
         if (leadM) leadM.value = 0;
+
+        // Reset Mode to Interval
+        const rad = document.querySelector('input[name="schedulerMode"][value="interval"]');
+        if (rad) {
+            rad.checked = true;
+            updateSchedulerModeUI();
+        }
 
 
         // Refresh
@@ -1717,6 +1753,8 @@ function renderSchedulerDetails() {
 
     if (st.expires_at) {
         info += ` | ⏳ Do: ${formatTime(st.expires_at)}`;
+    } else if (st.mode === 'midnight') {
+        info += ` | 🎯 Tryb Snajper (codziennie 00:00)`;
     }
 
     if (st.twin_profile) {
