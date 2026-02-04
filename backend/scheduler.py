@@ -85,32 +85,35 @@ class MedifinderScheduler:
             
             if mode == 'midnight':
                 # --- MIDNIGHT SNIPER MODE ---
-                # 1. Warm-up Job (23:55)
+                # Use Warsaw timezone for consistent trigger time regardless of server location
+                warsaw_tz = ZoneInfo("Europe/Warsaw")
+                
+                # 1. Warm-up Job (23:55 Warsaw time)
                 warmup_id = f"{task_id}_warmup"
                 self.scheduler.add_job(
                     func=self._execute_warmup,
-                    trigger=CronTrigger(hour=23, minute=55),
+                    trigger=CronTrigger(hour=23, minute=55, timezone=warsaw_tz),
                     id=warmup_id,
                     args=[task_id],
                     replace_existing=True,
                     max_instances=1
                 )
                 
-                # 2. Burst Job (00:00 - 00:05, every minute)
+                # 2. Burst Job (00:00 - 00:05 Warsaw time, every minute)
                 # minute='0-5' means 0,1,2,3,4,5
                 self.scheduler.add_job(
                     func=self._execute_task,
-                    trigger=CronTrigger(hour=0, minute='0-5', second=1), 
+                    trigger=CronTrigger(hour=0, minute='0-5', second=1, timezone=warsaw_tz), 
                     id=task_id,
                     args=[task_id],
                     replace_existing=True,
                     max_instances=1
                 )
                 
-                logger.info(f"✅ Zadanie {task_id} zaplanowane w trybie SNIPER (Warmup 23:55, Strzał 00:00-00:05)")
+                logger.info(f"✅ Zadanie {task_id} zaplanowane w trybie SNIPER (Warmup 23:55, Strzał 00:00-00:05 [Europe/Warsaw])")
                 
-                # Estimate next run for display
-                now = datetime.now()
+                # Estimate next run for display (using Warsaw time for calculation)
+                now = datetime.now(warsaw_tz)
                 if now.hour == 23 and now.minute >= 55:
                     # Warmup done/pending, waiting for midnight
                     next_run = (now + timedelta(days=1)).replace(hour=0, minute=0, second=1)
@@ -313,7 +316,8 @@ class MedifinderScheduler:
                 self.tasks[task_id]['next_run'] = (datetime.now() + timedelta(minutes=interval)).isoformat()
             else:
                 # Midnight mode next run logic for display
-                now = datetime.now()
+                warsaw_tz = ZoneInfo("Europe/Warsaw")
+                now = datetime.now(warsaw_tz)
                 if now.hour == 0 and now.minute < 5:
                      self.tasks[task_id]['next_run'] = (now + timedelta(minutes=1)).isoformat()
                 else:
